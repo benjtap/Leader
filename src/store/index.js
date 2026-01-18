@@ -7,6 +7,9 @@ import shiftTypeService from '../services/shiftTypeService'
 import settingsService from '../services/settingsService'
 import additionDeductionService from '../services/additionDeductionService'
 import systemDataService from '../services/systemDataService'
+import activityService from '../services/activityService'
+import leadsService from '../services/leadsService'
+import listsService from '../services/listsService'
 
 const getDefaultState = () => ({
     // Global UI State
@@ -20,6 +23,11 @@ const getDefaultState = () => ({
 
     // Data (Offline-first)
     shifts: [],
+    activities: [],
+    leads: [],
+    quotes: [],
+    followUp: [],
+    notRelevant: [],
     pendingSync: [],
     lastSync: null,
 
@@ -78,6 +86,11 @@ export default createStore({
         isAuthenticated: state => !!state.token,
         currentUser: state => state.user,
         allShifts: state => state.shifts,
+        allActivities: state => state.activities,
+        allLeads: state => state.leads,
+        allQuotes: state => state.quotes,
+        allFollowUp: state => state.followUp,
+        allNotRelevant: state => state.notRelevant,
         syncStatus: state => state.isSyncing,
         allShiftTypes: state => state.shiftTypes,
         allPaymentTypes: state => state.paymentTypes,
@@ -117,6 +130,11 @@ export default createStore({
             })
         },
         SET_SHIFTS(state, shifts) { state.shifts = shifts },
+        SET_ACTIVITIES(state, activities) { state.activities = activities },
+        SET_LEADS(state, leads) { state.leads = leads },
+        SET_QUOTES(state, data) { state.quotes = data },
+        SET_FOLLOWUP(state, data) { state.followUp = data },
+        SET_NOT_RELEVANT(state, data) { state.notRelevant = data },
         ADD_SHIFT(state, shift) {
             state.shifts.push(shift)
             state.pendingSync.push({ type: 'add', item: shift })
@@ -227,7 +245,10 @@ export default createStore({
                     dispatch('fetchShiftTypes'),
                     dispatch('fetchSettings'),
                     dispatch('fetchAdditionsDeductions'),
-                    dispatch('fetchSystemData')
+                    dispatch('fetchSystemData'),
+                    dispatch('fetchActivities'),
+                    dispatch('fetchLeads'),
+                    dispatch('fetchLists')
                 ])
                 console.log('Initial data fetched successfully')
 
@@ -441,6 +462,33 @@ export default createStore({
                 if (payRes.data) commit('SET_PAYMENT_TYPES', payRes.data)
                 if (sickRes.data) commit('SET_SICK_TYPES', sickRes.data)
             } catch (e) { console.error('Error fetching system data', e) }
+        },
+
+        async fetchActivities({ commit }) {
+            try {
+                const res = await activityService.getActivities();
+                if (res.data) commit('SET_ACTIVITIES', res.data);
+            } catch (e) { console.error('Error fetching activities', e); }
+        },
+
+        async fetchLeads({ commit }) {
+            try {
+                const res = await leadsService.getLeads();
+                if (res.data) commit('SET_LEADS', res.data);
+            } catch (e) { console.error('Error fetching leads', e); }
+        },
+
+        async fetchLists({ commit }) {
+            try {
+                const [q, f, n] = await Promise.all([
+                    listsService.getQuotes(),
+                    listsService.getFollowUp(),
+                    listsService.getNotRelevant()
+                ]);
+                if (q.data) commit('SET_QUOTES', q.data);
+                if (f.data) commit('SET_FOLLOWUP', f.data);
+                if (n.data) commit('SET_NOT_RELEVANT', n.data);
+            } catch (e) { console.error('Error fetching lists', e); }
         },
 
         async addAdditionDeduction({ commit, state }, item) {

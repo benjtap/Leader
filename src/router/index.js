@@ -1,6 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import LoginView from '../views/LoginView.vue'
-import DashboardView from '../views/DashboardView.vue'
+
 
 const router = createRouter({
     history: createWebHistory(import.meta.env.BASE_URL), // History mode
@@ -13,71 +13,19 @@ const router = createRouter({
             meta: { guest: true }
         },
         {
-            path: '/shifts',
-            name: 'shifts',
-            component: () => import('../views/ShiftsView.vue'),
-            meta: { requiresAuth: true } // Or false if testing without login
-        },
-        {
-            path: '/summary',
-            name: 'summary',
-            component: () => import('../views/SummaryView.vue'),
+            path: '/activities',
+            name: 'activities',
+            component: () => import('../views/DashboardView.vue'),
             meta: { requiresAuth: true }
         },
         {
-            path: '/weekly-plan',
-            name: 'weekly-plan',
-            component: () => import('../views/WeeklyPlanView.vue'),
-            meta: { requiresAuth: true }
+            path: '/dashboard',
+            redirect: '/activities'
         },
         {
-            path: '/weekly-schedules',
-            name: 'weekly-schedules',
-            component: () => import('../views/WeeklySchedulesListView.vue'),
-            meta: { requiresAuth: true }
-        },
-        {
-            path: '/shift-types',
-            name: 'shift-types',
-            component: () => import('../views/ShiftTypesView.vue'),
-            meta: { requiresAuth: true }
-        },
-        {
-            path: '/hours',
-            name: 'hours',
-            component: () => import('../views/HoursView.vue'),
-            meta: { requiresAuth: true }
-        },
-        {
-            path: '/settings',
-            name: 'settings',
-            component: () => import('../views/SettingsView.vue'),
-            meta: { requiresAuth: true }
-        },
-        {
-            path: '/overtime-settings',
-            name: 'overtime-settings',
-            component: () => import('../views/OvertimeSettingsView.vue'),
-            meta: { requiresAuth: true }
-        },
-        {
-            path: '/additions-deductions',
-            name: 'additions-deductions',
-            component: () => import('../views/AdditionsDeductionsView.vue'),
-            meta: { requiresAuth: true }
-        },
-        {
-            path: '/tax-deductions',
-            name: 'tax-deductions',
-            component: () => import('../views/TaxDeductionsView.vue'),
-            meta: { requiresAuth: true }
-        },
-        {
-            path: '/general-settings',
-            name: 'general-settings',
-            component: () => import('../views/GeneralSettingsView.vue'),
-            meta: { requiresAuth: true }
-        },
+            path: '/:pathMatch(.*)*',
+            redirect: '/activities'
+        }
     ]
 })
 
@@ -91,7 +39,7 @@ router.beforeEach((to, from, next) => {
     if (to.meta.requiresAuth && !isAuthenticated) {
         next({ name: 'login' })
     } else if (to.meta.guest && isAuthenticated) {
-        next({ name: 'shifts' }) // Redirect to dashboard if already logged in
+        next({ name: 'activities' }) // Redirect to dashboard if already logged in
     } else {
         next()
     }

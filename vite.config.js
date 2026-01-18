@@ -1,15 +1,39 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
+import { VitePWA } from 'vite-plugin-pwa'
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [vue()],
+  plugins: [
+    vue(),
+    VitePWA({
+      registerType: 'autoUpdate',
+      manifest: {
+        name: 'Leader App',
+        short_name: 'Leader',
+        description: 'Manage your leads and activities',
+        theme_color: '#ffffff',
+        icons: [
+          {
+            src: 'pwa-192x192.png',
+            sizes: '192x192',
+            type: 'image/png'
+          },
+          {
+            src: 'pwa-512x512.png',
+            sizes: '512x512',
+            type: 'image/png'
+          }
+        ]
+      }
+    })
+  ],
   server: {
     host: '0.0.0.0',
     proxy: {
       '/auth': {
-        target: 'https://api.entreprenariat-beni.com/',
-        targetold: 'http://localhost:5000',
+        target: 'http://localhost:5000',
+        targetold: 'https://api.entreprenariat-beni.com/',
         changeOrigin: true
       }
     }
