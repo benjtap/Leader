@@ -1,0 +1,31 @@
+git add .
+git commit -m "Message décrivant les changements"
+git push origin main
+
+git reset HEAD~1
+
+git status
+rm "nouveau 2.txt"
+
+git filter-branch --force --index-filter "git rm --cached --ignore-unmatch 'nouveau 2.txt'" --prune-empty --tag-name-filter cat -- --all
+
+# Nettoyez
+git reflog expire --expire=now --all
+git gc --prune=now --aggressive
+
+# Poussez en force
+git push --force
+
+# Recommiter sans ce fichier
+git add .
+git commit -m "Votre message"
+ rm  .git/index.lock
+ 
+  npm run build
+ npm run preview
+ 
+ 
+ rmdir /s /q .git
+ https://www.perplexity.ai/search/comment-creer-le-lien-entre-le-eYXl0Ou8SpSbZ3k82Y4VOg#0
+ 
+ 

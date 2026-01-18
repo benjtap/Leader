@@ -1,0 +1,12 @@
+{
+  "rewrites": [
+    {
+      "source": "/auth/(.*)",
+      "destination": "https://api.entreprenariat-beni.com/auth/$1"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}
