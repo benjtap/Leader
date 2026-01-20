@@ -14,6 +14,11 @@
         <input type="text" placeholder="Search" />
       </div>
       <div class="top-actions">
+        <!-- New Sync Button -->
+        <div class="icon-btn" @click="showSyncModal = true" title="Sync Mobile Contacts">
+            <span>📲</span>
+        </div>
+
         <div class="notification-badge">
           <span>🔔</span>
           <span class="badge">1</span>
@@ -200,6 +205,12 @@ const notRelevantItems = computed(() => store.getters.allNotRelevant);
   top: -5px; right: -5px;
   background: red; color: white;
   border-radius: 50%; padding: 2px 5px; font-size: 10px;
+}
+.icon-btn { 
+    font-size: 1.5rem; 
+    cursor: pointer; 
+    display: flex; 
+    align-items: center; 
 }
 
 /* Swiper Logic */

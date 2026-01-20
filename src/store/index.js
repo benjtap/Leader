@@ -491,6 +491,29 @@ export default createStore({
             } catch (e) { console.error('Error fetching lists', e); }
         },
 
+        async createActivity({ commit, dispatch }, activity) {
+            try {
+                const res = await activityService.createActivity(activity);
+                dispatch('fetchActivities');
+                return res;
+            } catch (e) {
+                console.error("Failed to create activity", e);
+                throw e;
+            }
+        },
+
+        async uploadContacts({ commit, dispatch }, contacts) {
+            try {
+                const res = await leadsService.syncContacts(contacts);
+                dispatch('fetchLeads');
+                dispatch('fetchActivities');
+                return res;
+            } catch (e) {
+                console.error("Failed to sync contacts", e);
+                throw e;
+            }
+        },
+
         async addAdditionDeduction({ commit, state }, item) {
             try {
                 const apiItem = { ...item };

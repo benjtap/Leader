@@ -33,6 +33,7 @@
             <span class="subtitle">Visible only to you</span>
           </div>
           <div class="header-actions">
+             <span class="action-icon" @click="showSyncModal = true" title="Sync Mobile">📲</span>
              <span class="filter-icon">
                 <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none">
                   <line x1="4" y1="6" x2="20" y2="6"></line>
@@ -43,6 +44,8 @@
              <span class="dots-icon">⋮</span>
           </div>
         </div>
+        
+        <MobileSyncModal :visible="showSyncModal" @close="showSyncModal = false" />
 
         <div class="activity-list">
           <div 
@@ -89,10 +92,12 @@
 </template>
 
 <script setup>
-import { computed, onMounted } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { useStore } from 'vuex';
+import MobileSyncModal from '../components/MobileSyncModal.vue';
 
 const store = useStore();
+const showSyncModal = ref(false);
 
 // Fetch activities on mount
 onMounted(() => {
@@ -211,6 +216,10 @@ const activities = computed(() => store.getters.allActivities);
   display: flex;
   gap: 10px;
   font-size: 1.25rem;
+}
+
+.action-icon {
+    cursor: pointer;
 }
 
 /* Activity List */

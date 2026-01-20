@@ -47,8 +47,7 @@ const syncContacts = async () => {
             }
         } else {
             console.log("Contacts gathered:", result.data);
-            // Here you would typically send to backend
-            // await store.dispatch('uploadContacts', result.data);
+            await store.dispatch('uploadContacts', result.data);
             
             store.dispatch('showToast', { message: `Synced ${result.data.length} contacts!`, type: 'success' });
             emit('synced', result.data);
