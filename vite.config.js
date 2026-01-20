@@ -33,7 +33,7 @@ export default defineConfig({
     proxy: {
       '/auth': {
         target: 'http://localhost:5000',
-        targetold: 'https://api.entreprenariat-beni.com/',
+        targetold: 'https://v2.entreprenariat-beni.com/',
         changeOrigin: true
       }
     }

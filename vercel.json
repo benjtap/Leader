@@ -2,7 +2,7 @@
   "rewrites": [
     {
       "source": "/auth/(.*)",
-      "destination": "https://api.entreprenariat-beni.com/auth/$1"
+      "destination": "https://v2.entreprenariat-beni.com/auth/$1"
     },
     {
       "source": "/(.*)",
