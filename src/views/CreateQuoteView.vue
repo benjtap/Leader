@@ -185,6 +185,8 @@ const totalAmount = computed(() => {
 
 const formatCurrency = (val) => `${currencySymbol.value} ${Number(val).toFixed(2)}`;
 
+const editQuoteId = route.query.quoteId;
+
 const saveQuote = async () => {
     // Validation
     const invalidItem = items.value.find(i => !i.description || !i.description.trim() || i.price <= 0);
@@ -198,15 +200,16 @@ const saveQuote = async () => {
     }
 
     const quoteData = {
+        id: editQuoteId, // Include ID if editing
         leadId: currentLead.value?.id || leadId,
         title: quoteTitle.value || 'New Quote',
         status: status.value,
-        items: items.value,
+        items: items.value.map(i => ({...i})), // Deep copy items
         subtotal: subtotal.value,
         discount: discount.value,
         discountType: discountType.value,
-        amount: totalAmount.value, // Changed from total to amount to match backend
-        total: totalAmount.value, // Keep locally just in case
+        amount: totalAmount.value, 
+        total: totalAmount.value, 
         comment: comment.value,
         currency: currencySymbol.value
     };
@@ -216,8 +219,26 @@ const saveQuote = async () => {
     router.push({ name: 'quote-preview', params: { quoteId: 'draft' } });
 };
 
-onMounted(() => {
-    if (!currentLead.value) store.dispatch('fetchLeads');
+onMounted(async () => {
+    if (!currentLead.value) await store.dispatch('fetchLeads');
+    
+    // If editing, load data
+    if (editQuoteId) {
+        // Ensure quotes for this lead are loaded
+        if (store.state.quotes.length === 0) {
+             await store.dispatch('fetchQuotes', leadId);
+        }
+        
+        const quote = store.state.quotes.find(q => q.id === editQuoteId);
+        if (quote) {
+            quoteTitle.value = quote.title;
+            status.value = quote.status;
+            items.value = quote.items ? JSON.parse(JSON.stringify(quote.items)) : [];
+            discount.value = quote.discount || 0;
+            discountType.value = quote.discountType || 'amount';
+            comment.value = quote.comment || '';
+        }
+    }
 });
 </script>
 

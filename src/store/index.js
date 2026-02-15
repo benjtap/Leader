@@ -574,10 +574,33 @@ export default createStore({
             try {
                 await quotesService.createQuote(quote);
                 dispatch('fetchQuotes', quote.leadId);
-                dispatch('showToast', { message: 'Quote created successfully', type: 'success' });
+                // dispatch('showToast', { message: 'Quote created successfully', type: 'success' }); // Handled in component
             } catch (e) {
                 console.error("Error creating quote", e);
-                dispatch('showToast', { message: 'Failed to create quote', type: 'error' });
+                // dispatch('showToast', { message: 'Failed to create quote', type: 'error' });
+                throw e;
+            }
+        },
+
+        async updateQuote({ dispatch }, { id, quote }) {
+            try {
+                await quotesService.updateQuote(id, quote);
+                dispatch('fetchQuotes', quote.leadId);
+            } catch (e) {
+                console.error("Error updating quote", e);
+                throw e;
+            }
+        },
+
+        async deleteQuote({ dispatch, state }, { id, leadId }) {
+            try {
+                await quotesService.deleteQuote(id);
+                // Remove from local state immediately for responsiveness
+                const quotes = state.quotes.filter(q => q.id !== id);
+                state.quotes = quotes; // Direct mutation or commit
+                // dispatch('fetchQuotes', leadId); // Optional if we mutate
+            } catch (e) {
+                console.error("Error deleting quote", e);
                 throw e;
             }
         },

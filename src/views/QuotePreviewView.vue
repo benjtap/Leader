@@ -11,7 +11,7 @@
       <div class="title">{{ quoteTitle }}</div>
       <div class="actions">
          <span class="settings-icon">⚙️</span>
-         <span class="dots-icon">⋮</span>
+         <span class="dots-icon" @click.stop="toggleMenu">⋮</span>
       </div>
     </div>
 
@@ -77,6 +77,19 @@
          <button class="btn-primary full" @click="shareQuote">Share</button>
     </div>
 
+    <!-- Menu Actions -->
+    <div v-if="showMenu" class="dropdown-menu">
+        <div class="menu-item" @click="handleAction('edit')">
+            <span class="icon">✎</span> Edit Quote
+        </div>
+        <div class="menu-item" @click="handleAction('duplicate')">
+            <span class="icon">❐</span> Duplicate Quote
+        </div>
+        <div class="menu-item delete" @click="handleAction('delete')">
+            <span class="icon">🗑</span> Delete Quote
+        </div>
+    </div>
+
   </div>
 </template>
 
@@ -91,6 +104,7 @@ const store = useStore();
 
 const quoteId = route.params.quoteId;
 const isDraft = quoteId === 'draft';
+const showMenu = ref(false);
 
 // Quote Data Source
 const quoteData = computed(() => {
@@ -106,7 +120,6 @@ const items = computed(() => quoteData.value?.items || []);
 const totalAmount = computed(() => quoteData.value?.amount || quoteData.value?.total || 0);
 const currentDate = computed(() => quoteData.value?.createdAt || new Date());
 const currencySymbol = computed(() => quoteData.value?.currency || '$');
-
 
 const currentLead = computed(() => {
     const lid = quoteData.value?.leadId;
@@ -128,13 +141,54 @@ const formatDate = (dateInput) => {
 
 const getValidityDate = (dateInput) => {
     const d = new Date(dateInput);
-    // Use settings here if available, default to 30
     const validity = store.getters.quoteSettings.validityDays || 30;
     d.setDate(d.getDate() + validity);
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 };
 
 // Actions
+const toggleMenu = () => {
+    showMenu.value = !showMenu.value;
+};
+
+const handleAction = async (action) => {
+    showMenu.value = false;
+    if (!quoteData.value) return;
+
+    if (action === 'edit') {
+        const lid = quoteData.value.leadId;
+        router.push({ 
+            name: 'create-quote', 
+            params: { leadId: lid }, 
+            query: { quoteId: quoteData.value.id } 
+        });
+    } else if (action === 'duplicate') {
+        const copy = { 
+            ...quoteData.value, 
+            id: null, // Clear ID to create new
+            title: `${quoteData.value.title} (Copy)`,
+            createdAt: new Date(),
+            status: 'Draft'
+        };
+        try {
+            await store.dispatch('createQuote', copy);
+            store.dispatch('showToast', { message: 'Quote duplicated', type: 'success' });
+        } catch (e) {
+            store.dispatch('showToast', { message: 'Failed to duplicate', type: 'error' });
+        }
+    } else if (action === 'delete') {
+        if (confirm("Are you sure you want to delete this quote?")) {
+            try {
+                await store.dispatch('deleteQuote', { id: quoteData.value.id, leadId: quoteData.value.leadId });
+                store.dispatch('showToast', { message: 'Quote deleted', type: 'success' });
+                router.back();
+            } catch (e) {
+                store.dispatch('showToast', { message: 'Failed to delete', type: 'error' });
+            }
+        }
+    }
+};
+
 const finalizeQuote = async (status) => {
     if (!quoteData.value) return;
 
@@ -145,7 +199,13 @@ const finalizeQuote = async (status) => {
     };
 
     try {
-        await store.dispatch('createQuote', finalData);
+        if (finalData.id && finalData.id !== 'draft') {
+            await store.dispatch('updateQuote', { id: finalData.id, quote: finalData });
+            store.dispatch('showToast', { message: 'Quote updated', type: 'success' });
+        } else {
+            await store.dispatch('createQuote', finalData);
+            store.dispatch('showToast', { message: `Quote ${status === 'Sent' ? 'sent' : 'saved'} successfully!`, type: 'success' });
+        }
         
         // Move Item Logic (Handling Lead Status Change)
         if (currentLead.value) {
@@ -157,7 +217,6 @@ const finalizeQuote = async (status) => {
              
              const targetType = quoteStep ? quoteStep.type : 'quote';
              
-             // Enforce Assignment
              const currentUser = store.getters.currentUser;
              const isAssigned = currentLead.value.assignedTo && currentLead.value.assignedTo.length > 0;
              const targetUserId = !isAssigned && currentUser ? currentUser.id : null;
@@ -171,16 +230,12 @@ const finalizeQuote = async (status) => {
             }
         }
 
-        store.dispatch('showToast', { message: `Quote ${status === 'Sent' ? 'sent' : 'saved'} successfully!`, type: 'success' });
-        
-        // Clear draft
+        // Clear draft & Navigate
         store.commit('SET_DRAFT_QUOTE', null);
         
-        // Navigate
         if (isDraft) {
-            router.go(-2); // Pop 'QuotePreview' and 'CreateQuote' to return to start (LeadDetails)
+            router.go(-2); 
         } else {
-             // For existing quotes (edit mode), just go back one step
              router.back();
         }
 
@@ -196,6 +251,7 @@ const saveAndSend = () => finalizeQuote('Sent');
 const shareQuote = () => {
     // Logic to share existing quote
     console.log("Sharing quote...");
+    // Native share logic could go here
 };
 
 onMounted(() => {
@@ -203,6 +259,13 @@ onMounted(() => {
         // If no data (refresh on draft page?), redirect back
         if (isDraft) {
             router.back();
+        } else {
+            // Fetch quotes if missing?
+             const lid = currentLead.value?.id; 
+             // Can't get lid if quoteData missing. 
+             // Maybe fetch all quotes? Or redirect.
+             // If navigating directly to /quote/:id, we might need to fetch.
+             // But we don't have leadId in URL here easily unless we fetch all.
         }
     }
 });
@@ -229,7 +292,34 @@ onMounted(() => {
 
 .back-icon { margin-right: 20px; cursor: pointer; color: #333; }
 .title { flex: 1; font-size: 1.1rem; font-weight: 500; color: #000; }
-.actions { display: flex; gap: 15px; color: #555; cursor: pointer; align-items: center; }
+.actions { display: flex; gap: 15px; color: #555; cursor: pointer; align-items: center; position: relative; }
+
+/* Menu Styles */
+.dropdown-menu {
+    position: absolute;
+    top: 50px;
+    right: 10px;
+    background: white;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    border-radius: 8px;
+    z-index: 100;
+    min-width: 180px;
+    overflow: hidden;
+}
+.menu-item {
+    padding: 12px 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 0.95rem;
+    color: #333;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+.menu-item:hover { background: #f5f5f5; }
+.menu-item .icon { width: 20px; text-align: center; color: #6200ea; font-size: 1.1rem; }
+.menu-item.delete { color: #d32f2f; }
+.menu-item.delete .icon { color: #d32f2f; }
 
 .document-container {
     margin: 20px;
