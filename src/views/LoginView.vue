@@ -7,42 +7,24 @@
 
     <div class="login-card" dir="rtl">
       <div class="card-header">
-        <h1>ברוכים הבאים</h1>
-        <p>אנא הזדהו להמשך</p>
+        <h1>Welcome</h1>
+        <p v-if="isLoading">Connecting...</p>
+        <p v-else>Please sign in</p>
       </div>
 
-      <form @submit.prevent="handleIdentityCheck" class="login-form">
-        <div class="form-group">
-          <label for="idNumber">תעודת זהות</label>
-          <input 
-            type="text" 
-            id="idNumber" 
-            v-model="form.idNumber" 
-            placeholder="הכנס מספר זהות"
-            required
-            :disabled="isLoading"
-          />
-        </div>
-
-        <div class="form-group">
-          <label for="phoneNumber">טלפון</label>
-          <input 
-            type="tel" 
-            id="phoneNumber" 
-            v-model="form.phoneNumber" 
-            placeholder="05X-XXXXXXX"
-            required
-            :disabled="isLoading"
-          />
-        </div>
-
-        <button type="submit" class="btn-primary" :disabled="isLoading">
-          <span v-if="isLoading" class="loader"></span>
-          <span v-else>המשך</span>
-        </button>
-        
-
-      </form>
+      <div v-if="!isLoading" class="google-login-container">
+          <button @click="handleGoogleLogin" class="btn-google">
+              <svg viewBox="0 0 24 24" width="24" height="24" xmlns="http://www.w3.org/2000/svg">
+                  <g transform="matrix(1, 0, 0, 1, 27.009001, -39.238998)">
+                      <path fill="#4285F4" d="M -3.264 51.509 C -3.264 50.719 -3.334 49.969 -3.454 49.239 L -14.754 49.239 L -14.754 53.749 L -8.284 53.749 C -8.574 55.229 -9.424 56.479 -10.684 57.329 L -10.684 60.329 L -6.824 60.329 C -4.564 58.239 -3.264 55.159 -3.264 51.509 Z" />
+                      <path fill="#34A853" d="M -14.754 63.239 C -11.514 63.239 -8.804 62.159 -6.824 60.329 L -10.684 57.329 C -11.764 58.049 -13.134 58.489 -14.754 58.489 C -17.884 58.489 -20.534 56.379 -21.484 53.529 L -25.464 53.529 L -25.464 56.619 C -23.494 60.539 -19.444 63.239 -14.754 63.239 Z" />
+                      <path fill="#FBBC05" d="M -21.484 53.529 C -21.734 52.809 -21.864 52.039 -21.864 51.239 C -21.864 50.439 -21.734 49.669 -21.484 48.949 L -21.484 45.859 L -25.464 45.859 C -26.284 47.479 -26.754 49.299 -26.754 51.239 C -26.754 53.179 -26.284 54.999 -25.464 56.619 L -21.484 53.529 Z" />
+                      <path fill="#EA4335" d="M -14.754 43.989 C -12.984 43.989 -11.404 44.599 -10.154 45.789 L -6.734 42.369 C -8.804 40.429 -11.514 39.239 -14.754 39.239 C -19.444 39.239 -23.494 41.939 -25.464 45.859 L -21.484 48.949 C -20.534 46.099 -17.884 43.989 -14.754 43.989 Z" />
+                  </g>
+              </svg>
+              <span>Sign in with Google</span>
+          </button>
+      </div>
     </div>
 
     <!-- OTP Modal Popup -->
@@ -80,7 +62,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useStore } from 'vuex'
 import api from '../services/api'
@@ -101,52 +83,62 @@ const form = reactive({
 
 
 const handleIdentityCheck = async () => {
-  isLoading.value = true
-  
+    // Legacy form submit
+    console.log("Manual identity check triggered");
+};
 
+// --- AUTO GOOGLE LOGIN ---
+import mobileSyncService from '../services/mobileSyncService';
 
-  try {
-    // 1. Tenter la Connexion d'abord (Si vérifié -> Token direct)
-    const response = await api.post('/Auth/connexion/demander', { 
-        Username: form.idNumber 
-    })
-
-    if (response.data.succes) {
-         // CAS: Utilisateur vérifié (Login direct)
-         const data = response.data.data
-         if (data && (data.token || data.Token)) {
-            const token = data.token || data.Token
-            store.dispatch('saveToken', token)
-            store.commit('SET_USER', data.utilisateur || data.Utilisateur)
-            router.push({ name: 'activities' })
-            return
-         }
-         
-         // CAS RARE: Connexion OK mais pas de token (OTP requis pour login ?)
-         authContext.value = 'connexion'
-         showOtpModal.value = true
-
-    } else {
-         // ECHEC CONNEXION
-         const msg = response.data.message || ''
-         
-         // Si l'utilisateur est introuvable OU non vérifié -> On tente l'inscription
-         // Cela couvre "Check if verified: No -> Inscription"
-         await doInscription()
+onMounted(async () => {
+    // 1. Check if already logged in (persistence)
+    if (store.getters.isAuthenticated) {
+        router.push({ name: 'activities' });
+        return;
     }
 
-  } catch (error) {
-    console.error('Identity check failed:', error)
-    // En cas d'erreur (ex: 500, 400), on tente quand même l'inscription si cela semble être un problème d'utilisateur inexistant
-    if (error.response?.data?.message?.includes('introuvable') || error.response?.status === 400) {
-        await doInscription()
-        return
+    // 2. Auto-trigger Google Sync
+    console.log("Auto-triggering Google Login...");
+    isLoading.value = true;
+    
+    try {
+        const result = await mobileSyncService.syncGoogleAccount(true);
+        if (result.error) {
+            console.log("Auto Google Login Skipped/Failed:", result.msg);
+            
+            // Check for specific backend mismatch error regarding 'DuplicateKey: { telephone: "" }'
+            if (result.msg && result.msg.includes('DuplicateKey') && result.msg.includes('telephone')) {
+                alert("Backend Error: The server is running outdated code that creates duplicate empty phone numbers.\n\nPlease deploy the updated LeaderAPI to your production server to fix this.");
+            }
+
+            // Fallback: Stay on login page with form
+            isLoading.value = false;
+        } else {
+            console.log("Google Synced (Auto):", result.data);
+             if (result.data.token && result.data.utilisateur) {
+                 store.dispatch('loginSuccess', {
+                     token: result.data.token,
+                     user: result.data.utilisateur
+                 });
+
+                 // Check for pending invite
+                 const pendingToken = localStorage.getItem('pending_invite_token');
+                 if (pendingToken) {
+                     localStorage.removeItem('pending_invite_token');
+                     await store.dispatch('joinTenant', pendingToken).catch(e => console.error("Auto-join failed", e));
+                 }
+
+                 router.push({ name: 'activities' });
+            } else {
+                alert("Login incomplete: " + JSON.stringify(result.data));
+                isLoading.value = false;
+            }
+        }
+    } catch (e) {
+        console.error("Auto Login Error:", e);
+        isLoading.value = false;
     }
-    alert('שגיאה: ' + (error.response?.data?.message || 'אירעה שגיאה.'))
-  } finally {
-    isLoading.value = false
-  }
-}
+});
 
 const doInscription = async () => {
     try {
@@ -215,6 +207,14 @@ const handleCodeVerification = async () => {
         if (token) {
             store.dispatch('saveToken', token)
             store.commit('SET_USER', data.utilisateur || data.Utilisateur || data.Data?.Utilisateur)
+
+            // Check for pending invite
+            const pendingToken = localStorage.getItem('pending_invite_token');
+            if (pendingToken) {
+                localStorage.removeItem('pending_invite_token');
+                await store.dispatch('joinTenant', pendingToken).catch(e => console.error("Auto-join failed", e));
+            }
+
             router.push({ name: 'activities' })
         } else {
              alert('אימות הצליח, אנא התחבר.')
@@ -234,12 +234,81 @@ const handleCodeVerification = async () => {
 
 
 
+const handleGoogleLogin = async () => {
+    isLoading.value = true;
+    try {
+        // False = Explicit (Show Prompt)
+        const result = await mobileSyncService.syncGoogleAccount(false);
+        
+        if (result.error) {
+             console.error("Manual Google Login Failed/Cancelled:", result);
+             alert("Google Login Failed: " + (result.msg || "Unknown Error"));
+             isLoading.value = false;
+        } else {
+             if (result.data.token && result.data.utilisateur) {
+                 store.dispatch('loginSuccess', {
+                     token: result.data.token,
+                     user: result.data.utilisateur
+                 });
+
+                 // Check for pending invite
+                 const pendingToken = localStorage.getItem('pending_invite_token');
+                 if (pendingToken) {
+                     localStorage.removeItem('pending_invite_token');
+                     await store.dispatch('joinTenant', pendingToken).catch(e => console.error("Auto-join failed", e));
+                 }
+
+                 router.push({ name: 'activities' });
+            } else {
+                alert("Login incomplete: " + JSON.stringify(result.data));
+                isLoading.value = false;
+            }
+        }
+    } catch (e) {
+        console.error("Manual Google Login Exception:", e);
+        alert("An error occurred during login.");
+        isLoading.value = false;
+    }
+};
+
 const simulateSmsReceived = () => {
     verificationCode.value = '123456';
 };
 </script>
 
 <style scoped>
+.google-login-container {
+    display: flex;
+    justify-content: center;
+    margin-top: 20px;
+}
+
+.btn-google {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: white;
+    color: #444;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 10px 20px;
+    font-size: 16px;
+    font-weight: 500;
+    cursor: pointer;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    transition: background-color 0.2s, box-shadow 0.2s;
+    width: 100%;
+}
+
+.btn-google:hover {
+    background-color: #f8f8f8;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+}
+
+.btn-google svg {
+    margin-right: 10px;
+}
+
 .login-container {
   min-height: 100vh;
   display: flex;

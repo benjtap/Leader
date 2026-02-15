@@ -53,6 +53,13 @@
           </span>
           <span>הגדרת סוג משמרת</span>
         </router-link>
+
+        <router-link to="/invite-teammates" class="menu-item" :class="{ 'active-menu-item': currentRouteName === 'invite-teammates' }" @click="close">
+          <span class="item-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><line x1="20" y1="8" x2="20" y2="14"></line><line x1="23" y1="11" x2="17" y2="11"></line></svg>
+          </span>
+          <span>הזמן חברי צוות</span>
+        </router-link>
         
         <router-link to="/settings" class="menu-item" :class="{ 'active-menu-item': currentRouteName === 'settings' }" @click="close">
           <span class="item-icon">
@@ -142,7 +149,6 @@ const close = () => {
 
 const logout = () => {
     store.dispatch('logout');
-    router.push({ name: 'login' });
 };
 
 const goToSummary = () => {

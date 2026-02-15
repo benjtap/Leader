@@ -2,7 +2,8 @@ import axios from 'axios'
 
 // Create axios instance
 const api = axios.create({
-    baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5000/api',
+    baseURL: 'http://192.168.1.104:5000/api', // LAN IP
+    // baseURL: 'https://v2.entreprenariat-beni.com/api', // Production
     timeout: 120000, // 2 minutes for Render cold starts
     headers: {
         'Content-Type': 'application/json'

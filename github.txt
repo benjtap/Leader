@@ -25,7 +25,34 @@ git commit -m "Votre message"
  npm run preview
  
  
+ npx cap sync
+ $env:JAVA_HOME="c:\Leader\tools\jdk-17"; .\gradlew assembleDebug
+ 
+ 
  rmdir /s /q .git
  https://www.perplexity.ai/search/comment-creer-le-lien-entre-le-eYXl0Ou8SpSbZ3k82Y4VOg#0
  
- 
+ adb pair 192.168.1.202:36265
+adb connect 192.168.1.202:36265
+
+
+
+
+adb -s 192.168.1.202:45041 install -r c:\Leader\app-debug.apk
+
+a chque fois que tu fait gradlenew execute avant
+Select-String -Path "c:\Leader\android\**\*.gradle" -Pattern "VERSION_21"
+
+New-NetFirewallRule -DisplayName "LeaderAPI" -Direction Inbound -LocalPort 5000 -Protocol TCP -Action Allow
+
+OAuth client 
+
+Client ID
+1020406982323-lfk62qr3juil6i34a88i4iqnb0ic9mr7.apps.googleusercontent.com
+
+Client secret
+
+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
+
+
+1020406982323-91r9n3nh651lajeas8s5niodgm5dd0c6.apps.googleusercontent.com

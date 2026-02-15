@@ -13,7 +13,10 @@
       
       <div class="actions">
         <button class="btn secondary" @click="close">Later</button>
-        <button class="btn primary" @click="syncContacts">Sync Now</button>
+        <button class="btn google-btn" @click="syncGoogle">
+            <span class="g-icon">G</span> Sync Google
+        </button>
+        <button class="btn primary" @click="syncContacts">Sync Contacts</button>
       </div>
     </div>
   </div>
@@ -47,7 +50,7 @@ const syncContacts = async () => {
             }
         } else {
             console.log("Contacts gathered:", result.data);
-            await store.dispatch('uploadContacts', result.data);
+            // await store.dispatch('uploadContacts', result.data);
             
             store.dispatch('showToast', { message: `Synced ${result.data.length} contacts!`, type: 'success' });
             emit('synced', result.data);
@@ -55,6 +58,43 @@ const syncContacts = async () => {
     } catch (e) {
         console.error(e);
         alert('Sync failed');
+    } finally {
+        emit('close');
+    }
+};
+
+const syncGoogle = async () => {
+    try {
+        store.dispatch('showToast', { message: 'Connecting to Google...', type: 'info' });
+        const result = await mobileSyncService.syncGoogleAccount();
+        
+        if (result.error) {
+            alert('Google Sync Failed: ' + result.msg);
+        } else {
+            console.log("Google Synced:", result.data);
+            
+            // Assuming result.data contains { token, utilisateur } from the backend (modified mobileSyncService)
+            if (result.data.token && result.data.utilisateur) {
+                 store.dispatch('loginSuccess', {
+                     token: result.data.token,
+                     user: result.data.utilisateur
+                 }); // You need to ensure this action exists in your store
+                 
+                 store.dispatch('showToast', { message: `Welcome ${result.data.utilisateur.username}`, type: 'success' });
+                 
+                 // Close and potentially redirect if not already on dashboard
+                 emit('synced', { type: 'google', data: result.data });
+                 emit('close');
+                 return;
+            }
+            
+            // Fallback if not full login structure
+            store.dispatch('showToast', { message: `Connected as ${result.data.email}`, type: 'success' });
+            emit('synced', { type: 'google', data: result.data });
+        }
+    } catch (e) {
+         console.error(e);
+         alert('Google Sync Error: ' + e.message);
     } finally {
         emit('close');
     }
@@ -122,5 +162,26 @@ p {
 .btn.secondary {
   background: #f3f4f6;
   color: #333;
+}
+
+.btn.google-btn {
+    background: #4285F4;
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+}
+.g-icon {
+    font-weight: bold;
+    background: white;
+    color: #4285F4;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
 }
 </style>

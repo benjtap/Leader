@@ -10,6 +10,10 @@ import systemDataService from '../services/systemDataService'
 import activityService from '../services/activityService'
 import leadsService from '../services/leadsService'
 import listsService from '../services/listsService'
+import workflowService from '../services/workflowService'
+import quotesService from '../services/quotesService'
+
+import { formatSmartDate } from '../utils/dateUtils'
 
 const getDefaultState = () => ({
     // Global UI State
@@ -25,11 +29,26 @@ const getDefaultState = () => ({
     shifts: [],
     activities: [],
     leads: [],
-    quotes: [],
-    followUp: [],
-    notRelevant: [],
+    draftQuote: null,
+    quotes: [], // Legacy compat
+    meetings: [],
+    closedDeals: [], // Legacy compat
+    followUp: [], // Legacy compat
+    notRelevant: [], // Legacy compat
+
+    // Dynamic Workflow
+    workflowSteps: [],
+    // Dynamic Workflow
+    workflowSteps: [],
+    listData: {}, // Map of type -> items
+    tenantMembers: [], // New State
+
     pendingSync: [],
     lastSync: null,
+
+    // UI Persistence
+    activeSlideIndex: 0,
+    focusedItemId: null,
 
     isSyncing: false,
     isLoadingRoute: false,
@@ -77,6 +96,17 @@ const getDefaultState = () => ({
         isStudyFundFixed182: false,
         pensionFund: 6,
         isPensionFundFixed182: false
+    },
+    quoteSettings: {
+        includeLogo: false,
+        startNumber: 0,
+        validityDays: 30,
+        currency: 'USD',
+        includeTax: false,
+        includeTotal: true,
+        taxRate: 0,
+        showCustomerDetails: false,
+        footerText: ''
     }
 })
 
@@ -87,10 +117,54 @@ export default createStore({
         currentUser: state => state.user,
         allShifts: state => state.shifts,
         allActivities: state => state.activities,
-        allLeads: state => state.leads,
-        allQuotes: state => state.quotes,
-        allFollowUp: state => state.followUp,
-        allNotRelevant: state => state.notRelevant,
+        allLeads: state => {
+            // Aggregate ALL leads from ALL lists (static + dynamic)
+            let all = [...(state.leads || []), ...(state.quotes || []), ...(state.followUp || []), ...(state.closedDeals || []), ...(state.notRelevant || [])];
+
+            if (state.listData) {
+                Object.values(state.listData).forEach(list => {
+                    if (Array.isArray(list)) {
+                        all = [...all, ...list];
+                    }
+                });
+            }
+
+            // Deduplicate by ID just in case
+            const seen = new Set();
+            return all.filter(item => {
+                const k = item.id;
+                if (!k || seen.has(k)) return false;
+                seen.add(k);
+                return true;
+            });
+        },
+
+        // Dynamic Lists Getter
+        getListItems: (state) => (type) => {
+            // Support legacy hardcoded arrays if needed, but prefer listData
+            if (state.listData[type]) return state.listData[type];
+
+            // Fallbacks for backward compatibility
+            if (type === 'lead') return state.leads;
+            if (type === 'quote' || type === 'quotes') return state.quotes;
+            if (type === 'followup') return state.followUp;
+            if (type === 'closeddeals') return state.closedDeals;
+            if (type === 'notrelevant') return state.notRelevant;
+
+            if (type === 'notrelevant') return state.notRelevant;
+
+            return [];
+        },
+
+        allWorkflowSteps: state => state.workflowSteps,
+        tenantMembers: state => state.tenantMembers || [], // New Getter
+
+        allQuotes: state => state.quotes, // Legacy
+        allMeetings: state => state.meetings,
+        allClosedDeals: state => state.closedDeals, // Legacy
+        allFollowUp: state => state.followUp, // Legacy
+        allNotRelevant: state => state.notRelevant, // Legacy
+
         syncStatus: state => state.isSyncing,
         allShiftTypes: state => state.shiftTypes,
         allPaymentTypes: state => state.paymentTypes,
@@ -112,7 +186,58 @@ export default createStore({
         taxPensionFund: state => state.taxSettings?.pensionFund || 5,
         taxIsPensionFundFixed182: state => state.taxSettings?.isPensionFundFixed182 || false,
         isMockMode: state => state.isMockMode,
-        isLoadingRoute: state => state.isLoadingRoute
+        isLoadingRoute: state => state.isLoadingRoute,
+        isLoadingRoute: state => state.isLoadingRoute,
+        quoteSettings: state => state.quoteSettings || {},
+        activeSlideIndex: state => state.activeSlideIndex,
+        focusedItemId: state => state.focusedItemId,
+
+        // Grouped activities for Dashboard
+        groupedActivities: state => {
+            // Gather all known numbers from entities (Leads, Quotes, etc.)
+            const allListPhones = [];
+            if (state.listData) {
+                Object.values(state.listData).forEach(list => {
+                    if (Array.isArray(list)) {
+                        list.forEach(item => {
+                            if (item.phone) allListPhones.push(String(item.phone).replace(/\D/g, ''));
+                        });
+                    }
+                });
+            }
+            const knownSet = new Set(allListPhones);
+
+            const map = new Map();
+            state.activities.forEach(item => {
+                if (!item.number) return;
+
+                // Filter out if number belongs to a known entity
+                const cleanNum = String(item.number).replace(/\D/g, '');
+                if (knownSet.has(cleanNum)) {
+                    return;
+                }
+
+                if (!map.has(item.number)) {
+                    map.set(item.number, {
+                        ...item,
+                        time: formatSmartDate(item.timestamp)
+                    });
+                }
+            });
+            return Array.from(map.values());
+        },
+
+        // Get full history for a specific number
+        getCallHistory: (state) => (number) => {
+            return state.activities
+                .filter(a => a.number === number)
+                .map(a => ({
+                    ...a,
+                    time: formatSmartDate(a.timestamp),
+                    fullDate: new Date(a.timestamp).toLocaleString()
+                }))
+                .sort((a, b) => b.timestamp - a.timestamp);
+        }
     },
     mutations: {
         SET_TOKEN(state, token) {
@@ -133,8 +258,47 @@ export default createStore({
         SET_ACTIVITIES(state, activities) { state.activities = activities },
         SET_LEADS(state, leads) { state.leads = leads },
         SET_QUOTES(state, data) { state.quotes = data },
+        SET_MEETINGS(state, data) { state.meetings = data },
+        SET_CLOSED_DEALS(state, data) { state.closedDeals = data },
         SET_FOLLOWUP(state, data) { state.followUp = data },
         SET_NOT_RELEVANT(state, data) { state.notRelevant = data },
+
+        SET_WORKFLOW_STEPS(state, steps) { state.workflowSteps = steps },
+        SET_LIST_DATA(state, { type, items }) {
+            state.listData = { ...state.listData, [type]: items };
+            // Sync legacy arrays for now
+            if (type === 'lead') state.leads = items;
+            if (type === 'quote' || type === 'quotes') state.quotes = items;
+            if (type === 'followup') state.followUp = items;
+            if (type === 'closeddeals') state.closedDeals = items;
+            if (type === 'notrelevant') state.notRelevant = items;
+        },
+        SET_DRAFT_QUOTE(state, quote) {
+            state.draftQuote = quote;
+        },
+        SET_TENANT_MEMBERS(state, members) { state.tenantMembers = members; },
+        SET_TENANT_MEMBERS(state, members) { state.tenantMembers = members; },
+        SET_QUOTES(state, quotes) { state.quotes = quotes; },
+
+        SET_ACTIVE_SLIDE(state, index) { state.activeSlideIndex = index; },
+        SET_FOCUSED_ITEM(state, id) { state.focusedItemId = id; },
+
+        UPDATE_LEAD(state, updatedLead) {
+            // Update in leads array
+            const index = state.leads.findIndex(l => l.id === updatedLead.id);
+            if (index !== -1) {
+                state.leads.splice(index, 1, updatedLead);
+            }
+
+            // Update in listData if present (since listData['lead'] is the source of truth often)
+            if (state.listData['lead']) {
+                const listIndex = state.listData['lead'].findIndex(l => l.id === updatedLead.id);
+                if (listIndex !== -1) {
+                    state.listData['lead'].splice(listIndex, 1, updatedLead);
+                }
+            }
+        },
+
         ADD_SHIFT(state, shift) {
             state.shifts.push(shift)
             state.pendingSync.push({ type: 'add', item: shift })
@@ -221,18 +385,37 @@ export default createStore({
         SET_TAX_POINT_VALUE(state, value) {
             if (!state.taxSettings) state.taxSettings = {}
             state.taxSettings.pointValue = value
+        },
+        SET_QUOTE_SETTINGS(state, settings) {
+            state.quoteSettings = { ...state.quoteSettings, ...settings };
         }
     },
     actions: {
         // Auth Actions
+        loginSuccess({ commit, dispatch }, { token, user }) {
+            commit('SET_TOKEN', token);
+            commit('SET_USER', user);
+            if (token) {
+                dispatch('fetchInitialData');
+            }
+        },
         saveToken({ commit, dispatch }, token) {
             commit('SET_TOKEN', token)
             if (token) {
                 dispatch('fetchInitialData')
             }
         },
-        logout({ commit }) {
+        async logout({ commit }) {
+            try {
+                const mobileSync = (await import('../services/mobileSyncService')).default;
+                await mobileSync.signOutGoogle();
+            } catch (e) {
+                console.error("Logout: Google SignOut failed", e);
+            }
+
             commit('LOGOUT')
+            localStorage.removeItem('human-resource-data');
+            localStorage.removeItem('pending_invite_token');
             window.location.href = '/login';
         },
 
@@ -240,234 +423,69 @@ export default createStore({
         async fetchInitialData({ dispatch, state }) {
             try {
                 await Promise.all([
-                    dispatch('fetchShifts'),
-                    dispatch('fetchWeeklyPlans'),
-                    dispatch('fetchShiftTypes'),
-                    dispatch('fetchSettings'),
-                    dispatch('fetchAdditionsDeductions'),
-                    dispatch('fetchSystemData'),
                     dispatch('fetchActivities'),
-                    dispatch('fetchLeads'),
-                    dispatch('fetchLists')
+                    dispatch('fetchWorkflowAndLists')
                 ])
                 console.log('Initial data fetched successfully')
-
-                // Force fix break if missing
-                const hasValidFixedBreak = (state.additionsDeductions || []).some(r =>
-                    (r.isFixedBreakAuto || r.description?.includes('הפסקה')) &&
-                    r.mode === 'time' &&
-                    r.minutes > 0
-                );
-
-                if (!hasValidFixedBreak) {
-                    console.log("No valid fixed break found. Forcing repair...");
-                    await dispatch('forceRepairFixedBreak');
-                }
             } catch (error) {
                 console.error('Error fetching initial data:', error)
             }
         },
 
-        async fetchShifts({ commit, state }) {
-            try {
-                const response = await shiftService.getShifts()
-                if (response.data) {
-                    const normalized = response.data
-                        .filter(s => s != null)
-                        .map(s => {
-                            const d = new Date(s.date);
-                            return {
-                                ...s,
-                                dayNumber: d.getDate().toString().padStart(2, '0'),
-                                fullDate: `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}/${d.getFullYear()}`
-                            };
-                        });
-                    commit('SET_SHIFTS', normalized)
-                    commit('SET_LAST_SYNC', Date.now())
-                }
-            } catch (error) {
-                console.error('Failed to fetch shifts:', error)
-            }
-        },
-
-        async fetchWeeklyPlans({ commit, state }) {
-            try {
-                const response = await weeklyPlanService.getWeeklyPlans()
-                if (response.data) {
-                    commit('SET_WEEKLY_PLANS', response.data)
-                }
-            } catch (error) {
-                console.error('Failed to fetch weekly plans:', error)
-            }
-        },
-
-        async addShift({ commit, state }, shift) {
-            try {
-                const apiShift = {
-                    ...shift,
-                    salary: parseFloat(shift.salary) || 0,
-                    extra: parseFloat(shift.extra) || 0,
-                    deduction: parseFloat(shift.deduction) || 0,
-                    break: parseInt(shift.break) || 0
-                };
-                delete apiShift.dayNumber;
-                delete apiShift.fullDate;
-
-                const response = await shiftService.createShift(apiShift);
-
-                if (response && response.data && response.data.id) {
-                    const newShift = { ...shift, id: response.data.id };
-                    commit('ADD_SHIFT', newShift);
-                } else {
-                    commit('ADD_SHIFT', shift);
-                }
-            } catch (e) {
-                console.error('Failed to create shift API', e);
-                throw e;
-            }
-        },
-
-        async updateShift({ commit, state }, { id, shift }) {
-            if (!id || !shift) return;
-            commit('UPDATE_SHIFT', { id, shift })
-            try {
-                const apiShift = {
-                    ...shift,
-                    id: id,
-                    salary: parseFloat(shift.salary) || 0,
-                    extra: parseFloat(shift.extra) || 0,
-                    deduction: parseFloat(shift.deduction) || 0,
-                    break: parseInt(shift.break) || 0
-                };
-                delete apiShift.dayNumber;
-                delete apiShift.fullDate;
-
-                await shiftService.updateShift(id, apiShift)
-            } catch (e) {
-                console.error('Failed to update shift API', e);
-            }
-        },
-
-        async deleteShift({ commit, state }, id) {
-            commit('DELETE_SHIFT', id)
-            try {
-                await shiftService.deleteShift(id)
-            } catch (e) {
-                console.error('Failed to delete shift API', e);
-            }
-        },
-
-        async sync({ commit, state, dispatch }) {
-            if (state.isSyncing || !state.token) return
-            commit('SET_SYNCING', true)
-            try {
-                if (state.pendingSync.length > 0) {
-                    await dispatch('pushPending')
-                }
-                await dispatch('fetchShifts')
-            } catch (error) {
-                console.error('Sync failed:', error)
-            } finally {
-                commit('SET_SYNCING', false)
-            }
-        },
-
-        async pushPending({ state, commit }) {
-            const pending = [...state.pendingSync]
-            for (const op of pending) {
-                try {
-                    if (op.type === 'add') {
-                        await shiftService.createShift(op.item)
-                    } else if (op.type === 'update') {
-                        await shiftService.updateShift(op.id, op.item)
-                    } else if (op.type === 'delete') {
-                        await shiftService.deleteShift(op.id)
-                    }
-                } catch (error) {
-                    console.error(`Failed to sync ${op.type}:`, error)
-                }
-            }
-            commit('CLEAR_PENDING')
-        },
-
-        async fetchShiftTypes({ commit, state }) {
-            try {
-                const response = await shiftTypeService.getShiftTypes()
-                if (response.data && response.data.length > 0) {
-                    commit('SET_SHIFT_TYPES', response.data)
-                }
-            } catch (e) { console.error(e) }
-        },
-
-        async addShiftType({ commit, state }, type) {
-            try {
-                const res = await shiftTypeService.createShiftType(type)
-                if (res.data) {
-                    commit('ADD_SHIFT_TYPE', res.data)
-                    commit('UPDATE_SHIFT_TYPE', res.data)
-                }
-            } catch (e) {
-                console.error("Failed to create shift type", e);
-            }
-        },
-
-        async updateShiftType({ commit, state }, type) {
-            try {
-                const res = await shiftTypeService.updateShiftType(type.id, type)
-                if (res.data) {
-                    commit('UPDATE_SHIFT_TYPE', res.data)
-                }
-            } catch (e) {
-                console.error(e)
-            }
-        },
-
-        async deleteShiftType({ commit, state }, id) {
-            commit('DELETE_SHIFT_TYPE', id)
-            await shiftTypeService.deleteShiftType(id)
-        },
-
-        showToast({ commit }, { message, type }) {
-            commit('SHOW_TOAST', { message, type });
-            setTimeout(() => {
-                commit('HIDE_TOAST');
-            }, 3000);
-        },
-
-        async addWeeklyPlan({ commit, state }, plan) {
-            const res = await weeklyPlanService.createWeeklyPlan(plan)
-            if (res.data) commit('ADD_WEEKLY_PLAN', res.data)
-        },
-        async deleteWeeklyPlan({ commit, state }, id) {
-            commit('DELETE_WEEKLY_PLAN', id)
-            await weeklyPlanService.deleteWeeklyPlan(id)
-        },
-        async updateWeeklyPlan({ commit, state }, plan) {
-            commit('UPDATE_WEEKLY_PLAN', plan)
-            await weeklyPlanService.updateWeeklyPlan(plan.id, plan)
-        },
-
-        async fetchAdditionsDeductions({ commit, state }) {
-            try {
-                const res = await additionDeductionService.getAll()
-                if (res.data) commit('SET_ADDITIONS_DEDUCTIONS', res.data)
-            } catch (e) { console.error(e) }
-        },
-        async fetchSystemData({ commit, state }) {
-            try {
-                const [payRes, sickRes] = await Promise.all([
-                    systemDataService.getPaymentTypes(),
-                    systemDataService.getSickTypes()
-                ])
-                if (payRes.data) commit('SET_PAYMENT_TYPES', payRes.data)
-                if (sickRes.data) commit('SET_SICK_TYPES', sickRes.data)
-            } catch (e) { console.error('Error fetching system data', e) }
-        },
-
-        async fetchActivities({ commit }) {
+        async fetchActivities({ commit, state }) {
             try {
                 const res = await activityService.getActivities();
-                if (res.data) commit('SET_ACTIVITIES', res.data);
+                let backend = res.data || [];
+                backend = backend.map(b => ({
+                    ...b,
+                    timestamp: b.timestamp || new Date(b.createdAt || Date.now()).getTime(),
+                    source: 'crm'
+                }));
+
+                const mobileSync = (await import('../services/mobileSyncService')).default;
+                const logRes = await mobileSync.getCallLogs();
+
+                let nativeLogs = [];
+                if (!logRes.error && logRes.data) {
+                    nativeLogs = logRes.data.map(l => ({
+                        ...l,
+                        timestamp: l.rawTime || l.timestamp || Date.now(),
+                        source: 'mobile'
+                    }));
+                }
+
+                // Dynamically collect all phones from all lists in listData (including custom dynamic lists)
+                const allListPhones = [];
+                if (state.listData) {
+                    Object.values(state.listData).forEach(list => {
+                        if (Array.isArray(list)) {
+                            list.forEach(item => {
+                                if (item.phone) allListPhones.push(item.phone);
+                            });
+                        }
+                    });
+                }
+
+                const allKnownPhones = new Set(allListPhones);
+
+                const normalize = (p) => p ? String(p).replace(/\D/g, '') : '';
+                const allKnownNormalized = new Set(Array.from(allKnownPhones).map(normalize));
+
+                /* 
+                // Don't filter out known native logs here. 
+                // We want them in state.activities so they appear in Call History (Lead Details).
+                // They are filtered out of the "Last Activity" dashboard view via the groupedActivities getter.
+                nativeLogs = nativeLogs.filter(log => {
+                    const logPhone = normalize(log.number);
+                    if (allKnownNormalized.has(logPhone)) return false;
+                    return true;
+                });
+                */
+
+                let combined = [...nativeLogs, ...backend];
+                combined.sort((a, b) => b.timestamp - a.timestamp);
+
+                commit('SET_ACTIVITIES', combined);
             } catch (e) { console.error('Error fetching activities', e); }
         },
 
@@ -480,16 +498,91 @@ export default createStore({
 
         async fetchLists({ commit }) {
             try {
-                const [q, f, n] = await Promise.all([
+                const [q, f, n, c] = await Promise.all([
                     listsService.getQuotes(),
                     listsService.getFollowUp(),
-                    listsService.getNotRelevant()
+                    listsService.getNotRelevant(),
+                    listsService.getClosedDeals()
                 ]);
                 if (q.data) commit('SET_QUOTES', q.data);
                 if (f.data) commit('SET_FOLLOWUP', f.data);
                 if (n.data) commit('SET_NOT_RELEVANT', n.data);
+                if (c.data) commit('SET_CLOSED_DEALS', c.data);
             } catch (e) { console.error('Error fetching lists', e); }
         },
+
+        async fetchWorkflowAndLists({ commit, dispatch }) {
+            try {
+                const res = await workflowService.getWorkflow();
+                const steps = res.data;
+                commit('SET_WORKFLOW_STEPS', steps);
+
+                const promises = steps.map(step =>
+                    workflowService.getListItems(step.type)
+                        .then(r => ({ type: step.type, items: r.data }))
+                        .catch(e => { console.error(`Error fetching ${step.type}`, e); return { type: step.type, items: [] }; })
+                );
+
+                const results = await Promise.all(promises);
+
+                results.forEach(({ type, items }) => {
+                    commit('SET_LIST_DATA', { type, items });
+                });
+
+            } catch (e) {
+                console.error("Error fetching workflow", e);
+            }
+        },
+
+        async createWorkflowStep({ dispatch }, name) {
+            await workflowService.createStep(name);
+            dispatch('fetchWorkflowAndLists');
+        },
+
+        async deleteWorkflowStep({ dispatch }, id) {
+            await workflowService.deleteStep(id);
+            dispatch('fetchWorkflowAndLists');
+        },
+
+        async reorderWorkflowSteps({ dispatch }, orderedIds) {
+            await workflowService.reorderSteps(orderedIds);
+            dispatch('fetchWorkflowAndLists');
+        },
+
+        async fetchTenantMembers({ commit }) {
+            try {
+                const res = await api.get('/tenants/members');
+                if (res.data) commit('SET_TENANT_MEMBERS', res.data);
+            } catch (e) { console.error("Error fetching members", e); }
+        },
+
+        async deleteWorkflowStepAndMove({ dispatch }, { id, targetType, targetUserId }) {
+            await workflowService.deleteStepAndMove(id, targetType, targetUserId);
+            dispatch('fetchWorkflowAndLists');
+        },
+
+        async fetchQuotes({ commit }, leadId) {
+            try {
+                const res = await quotesService.getQuotesByLead(leadId);
+                if (res.data) commit('SET_QUOTES', res.data);
+            } catch (e) {
+                console.error("Error fetching quotes", e);
+            }
+        },
+
+        async createQuote({ dispatch }, quote) {
+            try {
+                await quotesService.createQuote(quote);
+                dispatch('fetchQuotes', quote.leadId);
+                dispatch('showToast', { message: 'Quote created successfully', type: 'success' });
+            } catch (e) {
+                console.error("Error creating quote", e);
+                dispatch('showToast', { message: 'Failed to create quote', type: 'error' });
+                throw e;
+            }
+        },
+
+
 
         async createActivity({ commit, dispatch }, activity) {
             try {
@@ -502,10 +595,33 @@ export default createStore({
             }
         },
 
+        async updateActivity({ commit, dispatch }, { id, activity }) {
+            try {
+                const res = await activityService.updateActivity(id, activity);
+                dispatch('fetchActivities');
+                return res;
+            } catch (e) {
+                console.error("Failed to update activity", e);
+                throw e;
+            }
+        },
+
+        async deleteActivity({ commit, dispatch }, id) {
+            try {
+                const res = await activityService.deleteActivity(id);
+                dispatch('fetchActivities');
+                return res;
+            } catch (e) {
+                console.error("Failed to delete activity", e);
+                throw e;
+            }
+        },
+
         async uploadContacts({ commit, dispatch }, contacts) {
             try {
                 const res = await leadsService.syncContacts(contacts);
                 dispatch('fetchLeads');
+                dispatch('fetchWorkflowAndLists');
                 dispatch('fetchActivities');
                 return res;
             } catch (e) {
@@ -514,12 +630,39 @@ export default createStore({
             }
         },
 
+        async uploadFile({ commit }, formData) {
+            try {
+                // We need to use raw axios or api instance for multipart/form-data
+                // Ensure 'Content-Type': 'multipart/form-data' is set automatically by browser or force it
+                const res = await api.post('/files/upload', formData, {
+                    headers: {
+                        'Content-Type': 'multipart/form-data'
+                    }
+                });
+                return res.data;
+            } catch (e) {
+                console.error("File upload failed", e);
+                throw e;
+            }
+        },
+
+        async cleanupDuplicates({ dispatch }) {
+            try {
+                const res = await leadsService.cleanupDuplicates();
+                dispatch('fetchWorkflowAndLists');
+                dispatch('showToast', { message: res.data.message, type: 'success' });
+                return res;
+            } catch (e) {
+                console.error("Failed to cleanup duplicates", e);
+                throw e;
+            }
+        },
+
         async addAdditionDeduction({ commit, state }, item) {
             try {
                 const apiItem = { ...item };
-                if (apiItem.id && String(apiItem.id).length > 10) delete apiItem.id; // Remove fake IDs if generated by client
+                if (apiItem.id && String(apiItem.id).length > 10) delete apiItem.id;
 
-                // SATISFY BACKEND VALIDATION: FrontendId is Required
                 if (!apiItem.frontendId) {
                     apiItem.frontendId = String(item.id || Date.now());
                 }
@@ -545,16 +688,12 @@ export default createStore({
             try {
                 if (!item.id) throw new Error("Missing ID for update");
                 const apiItem = { ...item };
-
-                // SATISFY BACKEND VALIDATION: FrontendId is Required
                 if (!apiItem.frontendId) {
                     apiItem.frontendId = String(item.id);
                 }
-
                 await additionDeductionService.update(item.id, apiItem)
             } catch (e) {
                 console.error("Failed to update addition/deduction. Item:", item, "Error:", e);
-                // Maybe revert commit if critical?
             }
         },
 
@@ -593,7 +732,6 @@ export default createStore({
         },
 
         async syncFixedBreakDeduction({ commit, state, dispatch }, { enabled, minutes }) {
-            // Find any deduction that looks like a "Break" (manual or auto)
             const existingItem = state.additionsDeductions.find(i =>
                 i.isFixedBreakAuto === true ||
                 (i.type === 'deduction' && i.description && i.description.includes('הפסקה'))
@@ -612,16 +750,13 @@ export default createStore({
                 };
 
                 if (existingItem) {
-                    // Update existing (even if it was manual before, we take control)
                     if (existingItem.minutes !== newItem.minutes || !existingItem.isFixedBreakAuto) {
                         await dispatch('updateAdditionDeduction', { ...existingItem, ...newItem });
                     }
                 } else {
-                    // Create new
                     await dispatch('addAdditionDeduction', { ...newItem, id: Date.now() });
                 }
             } else {
-                // If disabled, remove the auto-created one (found by flag or name)
                 if (existingItem) {
                     await dispatch('deleteAdditionDeduction', existingItem.id);
                 }
@@ -629,10 +764,6 @@ export default createStore({
         },
 
         async forceRepairFixedBreak({ commit, state, dispatch }) {
-            console.log("Force Repair Fixed Break - CHECK ONLY (Auto-Repair Disabled to prevent 40m overwrite)");
-            // Logic disabled to respect user settings (20, 30, etc.)
-            // Previously this function forced 40m if it thought break was missing.
-            // Now we trust the user.
             return;
         },
 
@@ -670,19 +801,252 @@ export default createStore({
         },
         async deleteShiftRate({ commit, state, dispatch }, { shiftId, index }) {
             const shiftType = state.shiftTypes.find(t => t.id === shiftId)
-            if (!shiftType || !shiftType.rates) return
+            if (!shiftType) return
 
             const updatedRates = shiftType.rates.filter((_, i) => i !== index)
             const updatedType = { ...shiftType, rates: updatedRates };
             commit('UPDATE_SHIFT_TYPE', updatedType)
             await dispatch('updateShiftType', updatedType)
-        }
+        },
+
+        async moveItem({ dispatch, commit, state }, { item, target, targetUserId }) {
+            console.log(`Store: Moving item ${item.name || item.id} to ${target} (assigned to: ${targetUserId})`);
+            try {
+                let targetType = target;
+                if (target === 'follow_up') targetType = 'followup';
+                if (target === 'not_relevant') targetType = 'notrelevant';
+                if (target === 'closed_deal') targetType = 'closeddeals';
+                if (target === 'last_activity') {
+                    console.warn("Moving TO activity not fully implemented or needed.");
+                    return;
+                }
+
+                // Logic to enforce assignment to current user ONLY if not already assigned
+                const currentUser = state.user;
+                const currentUserId = currentUser ? currentUser.id : null;
+                let effectiveUserId = targetUserId; // Initialize with the passed targetUserId
+
+                if (item.source === 'crm' || item.source === 'mobile') {
+                    // For new leads from activities, default to current user if not provided
+                    if (!effectiveUserId) effectiveUserId = currentUserId;
+
+                    const payload = {
+                        name: item.name,
+                        phone: item.number,
+                        listType: targetType,
+                        initial: item.initial,
+                        color: item.color,
+                        sourceId: item.id,
+                        email: "",
+                        description: "",
+                        assignedTo: effectiveUserId ? [effectiveUserId] : [], // Use effectiveUserId
+                        userId: effectiveUserId || item.userId // Use effectiveUserId for owner if not specified
+                    };
+
+                    const createRes = await leadsService.createLead(payload);
+                    let createdLead = createRes.data;
+                    console.log("MoveItem - Lead Data:", createdLead);
+
+                    let leadId = createdLead?.id || createdLead?.Id || createdLead?._id;
+
+                    if (!leadId) {
+                        console.warn("MoveItem - ID missing in create response. Attempting to fetch item by phone from target list...");
+                        try {
+                            // Wait briefly for backend consistency
+                            await new Promise(resolve => setTimeout(resolve, 500));
+
+                            let listRes;
+                            const lt = payload.listType;
+
+                            if (lt === 'lead') listRes = await leadsService.getLeads();
+                            else if (lt === 'quote') listRes = await listsService.getQuotes();
+                            else if (lt === 'followup') listRes = await listsService.getFollowUp();
+                            else if (lt === 'closeddeals') listRes = await listsService.getClosedDeals();
+                            else if (lt === 'notrelevant') listRes = await listsService.getNotRelevant();
+                            else {
+                                // Default fallback to leads + quotes if type unknown
+                                const [lRes, qRes] = await Promise.all([leadsService.getLeads(), listsService.getQuotes()]);
+                                listRes = { data: [...(lRes.data || []), ...(qRes.data || [])] };
+                            }
+
+                            if (listRes && listRes.data) {
+                                const foundLead = listRes.data.find(l =>
+                                    (l.phone && l.phone === payload.phone) ||
+                                    (l.name && l.name === payload.name)
+                                );
+                                if (foundLead) {
+                                    createdLead = foundLead;
+                                    leadId = foundLead.id || foundLead.Id || foundLead._id;
+                                    console.log("MoveItem - Recovered Lead ID:", leadId);
+                                }
+                            }
+                        } catch (err) { console.error("Recovery failed", err); }
+                    }
+
+                    if (!leadId) {
+                        console.error("MoveItem - Critical: No ID returned for lead", createdLead);
+                        throw new Error("Failed to retrieve Lead ID");
+                    }
+
+                    // If lead already existed, it might be in a different list or unassigned
+                    if (createdLead.listType !== targetType) {
+                        console.log(`Lead exists in ${createdLead.listType}, forcing move to ${targetType}`);
+                        await leadsService.moveLead(leadId, targetType);
+                    }
+
+                    // Always enforce assignment if requested (CreateAsync doesn't update existing leads)
+                    if (effectiveUserId) { // Use effectiveUserId
+                        console.log(`Assigning lead ${leadId} to user ${effectiveUserId}`);
+                        await leadsService.assignLead(leadId, effectiveUserId);
+                    }
+
+                    if ((item.source === 'crm' || item.source === 'mobile') && item.id) {
+                        try {
+                            await activityService.deleteActivity(item.id);
+                        } catch (delErr) {
+                            console.warn("Could not delete activity", delErr);
+                        }
+                    }
+
+                    dispatch('showToast', { message: 'Moved from Activity successfully', type: 'success' });
+                    dispatch('fetchActivities');
+                    dispatch('fetchWorkflowAndLists');
+                }
+                else {
+                    if (!item.id) throw new Error("Item ID missing for move");
+
+                    // Check if existing item needs assignment enforced
+                    // Only enforce current user if the item has NO assignment at all
+                    if (!effectiveUserId) {
+                        const isAssigned = item.assignedTo && item.assignedTo.length > 0;
+                        if (!isAssigned) {
+                            effectiveUserId = currentUserId;
+                        } else {
+                            // If already assigned, keep existing assignment unless explicitly changed
+                            console.log("Item already assigned, keeping existing assignment.");
+                        }
+                    }
+
+                    // Optimistic Update: Remove from all current lists to ensure it doesn't duplicate
+                    if (state.listData) {
+                        Object.keys(state.listData).forEach(key => {
+                            const list = state.listData[key];
+                            if (Array.isArray(list)) {
+                                const idx = list.findIndex(i => i.id === item.id);
+                                if (idx !== -1) {
+                                    const newList = [...list];
+                                    newList.splice(idx, 1);
+                                    commit('SET_LIST_DATA', { type: key, items: newList });
+                                }
+                            }
+                        });
+                    }
+
+                    await leadsService.moveLead(item.id, targetType);
+
+                    if (effectiveUserId) { // Use effectiveUserId
+                        // If explicit assignment requested
+                        console.log(`Assigning existing item ${item.id} to user ${effectiveUserId}`);
+                        await leadsService.assignLead(item.id, effectiveUserId);
+                    }
+
+                    dispatch('showToast', { message: 'Moved successfully', type: 'success' });
+                    await dispatch('fetchWorkflowAndLists');
+                }
+
+            } catch (error) {
+                console.error("Move failed:", error);
+                // Log full error details
+                if (error.response) {
+                    console.error("Data:", error.response.data);
+                    console.error("Status:", error.response.status);
+                    console.error("Headers:", error.response.headers);
+                }
+                dispatch('showToast', { message: 'Move failed', type: 'error' });
+                // Revert or re-fetch on failure
+                dispatch('fetchWorkflowAndLists');
+            }
+        },
+
+        async assignItem({ dispatch }, { item, targetUserId }) {
+            try {
+                if (item.source === 'crm' || item.source === 'mobile') {
+                    // Create new lead assigned to target user
+                    const payload = {
+                        name: item.name || item.number,
+                        phone: item.number,
+                        listType: 'lead', // Default to Leads list when assigning from activity
+                        assignedTo: [targetUserId],
+                        userId: targetUserId, // Also make them owner? Usually yes if assigning new lead.
+                        initial: item.initial,
+                        color: item.color,
+                        sourceId: item.id,
+                        email: "",
+                        description: ""
+                    };
+
+                    await leadsService.createLead(payload);
+
+                    if (item.source === 'crm' && item.id) {
+                        await activityService.deleteActivity(item.id);
+                    }
+
+                    dispatch('showToast', { message: 'Assigned successfully', type: 'success' });
+                    dispatch('fetchActivities');
+                    dispatch('fetchWorkflowAndLists');
+                } else {
+                    // Existing lead/item
+                    if (!item.id) throw new Error("ID missing");
+                    const res = await leadsService.assignLead(item.id, targetUserId);
+
+                    if (res.data) {
+                        commit('UPDATE_LEAD', res.data);
+                    }
+
+                    dispatch('showToast', { message: 'Assigned successfully', type: 'success' });
+                    // Still fetch to be safe, but UI should update instantly now
+                    dispatch('fetchWorkflowAndLists');
+                }
+            } catch (e) {
+                console.error("Assign failed", e);
+                dispatch('showToast', { message: 'Assign failed', type: 'error' });
+            }
+        },
+
+        async createTenant({ commit, dispatch }, { companyName, industry, companySize }) {
+            try {
+                const res = await api.post('/tenants', { companyName, industry, companySize });
+                if (res.data.token && res.data.user) {
+                    commit('SET_TOKEN', res.data.token);
+                    commit('SET_USER', res.data.user);
+                }
+                return res.data;
+            } catch (e) {
+                console.error('Create tenant failed', e);
+                throw e;
+            }
+        },
+
+        async joinTenant({ commit, dispatch }, token) {
+            try {
+                const res = await api.post('/invitations/accept', { token });
+                if (res.data.success) {
+                    dispatch('showToast', { message: 'Joined team successfully!', type: 'success' });
+                    const userRes = await api.get('/auth/profil');
+                    if (userRes.data && userRes.data.data) {
+                        commit('SET_USER', userRes.data.data);
+                    }
+                }
+                return res.data;
+            } catch (e) {
+                console.error('Join tenant failed', e);
+                throw e;
+            }
+        },
     },
     plugins: [
         createPersistedState({
             key: 'human-resource-data',
-            // FIX: Only persist Auth. Do NOT persist settings/shifts to avoid stale "Ghost Objects" (like the 40min bug).
-            // App will fetch fresh data from API on reload.
             paths: ['token', 'user']
         })
     ]

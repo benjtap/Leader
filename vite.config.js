@@ -6,34 +6,14 @@ import { VitePWA } from 'vite-plugin-pwa'
 export default defineConfig({
   plugins: [
     vue(),
-    VitePWA({
-      registerType: 'autoUpdate',
-      manifest: {
-        name: 'Leader App',
-        short_name: 'Leader',
-        description: 'Manage your leads and activities',
-        theme_color: '#ffffff',
-        icons: [
-          {
-            src: 'pwa-192x192.png',
-            sizes: '192x192',
-            type: 'image/png'
-          },
-          {
-            src: 'pwa-512x512.png',
-            sizes: '512x512',
-            type: 'image/png'
-          }
-        ]
-      }
-    })
+    // VitePWA({...}) // DISABLED TO FIX CACHING ISSUES
   ],
   server: {
     host: '0.0.0.0',
     proxy: {
       '/auth': {
-        target: 'http://localhost:5000',
-        targetold: 'https://v2.entreprenariat-beni.com/',
+        targetold: 'http://localhost:5000',
+        target: 'https://v2.entreprenariat-beni.com/',
         changeOrigin: true
       }
     }

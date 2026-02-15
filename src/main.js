@@ -24,4 +24,14 @@ if (store.state.token) {
     store.dispatch('fetchInitialData')
 }
 
+// FORCE UNREGISTER ALL SERVICE WORKERS TO CLEAR CACHE
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.getRegistrations().then(function (registrations) {
+        for (let registration of registrations) {
+            console.log('Unregistering SW:', registration);
+            registration.unregister();
+        }
+    });
+}
+
 app.mount('#app')

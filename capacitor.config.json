@@ -1,0 +1,22 @@
+{
+  "appId": "com.leader.app",
+  "appName": "LeaderApp",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "http",
+    "cleartext": true,
+    "allowNavigation": [
+      "*"
+    ]
+  },
+  "plugins": {
+    "GoogleAuth": {
+      "scopes": [
+        "profile",
+        "email"
+      ],
+      "serverClientId": "658997062217-9tmtdj1d5od0co89sd4250tce83mds9m.apps.googleusercontent.com",
+      "forceCodeForRefreshToken": true
+    }
+  }
+}

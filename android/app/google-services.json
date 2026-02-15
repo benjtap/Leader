@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "658997062217",
+    "project_id": "brilliant-will-464801-h1-733a5",
+    "storage_bucket": "brilliant-will-464801-h1-733a5.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:658997062217:android:f8e5afb1bf36466c2c6d98",
+        "android_client_info": {
+          "package_name": "com.leader.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyARChjTTbPYOEuIY4cXYDSjjWgbtfYccIo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

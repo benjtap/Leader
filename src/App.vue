@@ -1,12 +1,15 @@
 <script setup>
 import { RouterView } from 'vue-router'
 import { onMounted } from 'vue'
+import { App as CapacitorApp } from '@capacitor/app';
+import { useStore } from 'vuex';
+import { useRouter } from 'vue-router';
 import api from './services/api'
 
 onMounted(() => {
   // Wake up Render Backend (Free Tier Cold Start) - Fire and forget
   // This helps start the server while the user enters credentials
-  api.get('/').catch(() => { /* Ignore errors, just waking up */ });
+  // api.get('/').catch(() => { /* Ignore errors, just waking up */ });
 
   // Tente de passer en plein écran dès la première interaction (clic) de l'utilisateur
   // Les navigateurs bloquent le plein écran automatique sans interaction pour sécurité.
@@ -19,7 +22,46 @@ onMounted(() => {
   };
 
   window.addEventListener('click', goFullScreen, { once: true });
+
+  // Deep Link Listener
+  CapacitorApp.addListener('appUrlOpen', async (data) => {
+      // Example: leader://invite?token=XYZ
+      const url = new URL(data.url);
+      const token = url.searchParams.get('token');
+      
+      if (url.host === 'invite' && token) {
+          const store = useStore();
+          // Assuming user is logged in. If not, maybe store token and redirect to login?
+          // For now, try join directly.
+          if (store.getters.isAuthenticated) {
+              try {
+                  await store.dispatch('joinTenant', token);
+              } catch (e) {
+                  // Handled in store
+              }
+          } else {
+             // User not logged in, but has invite token.
+             localStorage.setItem('pending_invite_token', token);
+             
+             // Visual Feedback
+             store.dispatch('showToast', { 
+                message: 'Invite received! Please login/signup to join.', 
+                type: 'info' 
+             });
+
+             // Ensure we are on the login page
+             // We need to import router carefully or use window.location if router is not valid here
+             // But since we are inside onMounted of App.vue, we can use the router instance if we initialized it properly.
+             // However, `useRouter()` inside setup() is fine, but inside the callback? 
+             // Start of script setup defines `router`. We can use it.
+             router.push({ name: 'login' });
+          }
+      }
+  });
 })
+
+const store = useStore();
+const router = useRouter(); // Initialize for usage if needed later
 </script>
 
 <template>

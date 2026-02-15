@@ -6,5 +6,11 @@ export default {
     },
     createActivity(activity) {
         return api.post('/Activities', activity);
+    },
+    updateActivity(id, activity) {
+        return api.put(`/Activities/${id}`, activity);
+    },
+    deleteActivity(id) {
+        return api.delete(`/Activities/${id}`);
     }
 };
