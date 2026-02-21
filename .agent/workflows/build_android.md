@@ -27,7 +27,7 @@ Select-String -Path "c:\Leader\android\**\*.gradle" -Pattern "VERSION_21"
 5. Build the Debug APK
 // turbo
 ```powershell
-cd c:\Leader\android; $env:JAVA_HOME = "C:\Leader\tools\jdk-17"; ./gradlew assembleDebug
+cd c:\Leader\android; $env:JAVA_HOME = "C:\Leader\tools\jdk-21"; ./gradlew assembleDebug
 ```
 
 6. Copy the APK to project root for easier access

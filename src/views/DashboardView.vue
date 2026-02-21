@@ -18,12 +18,16 @@
       </div>
 
       <div class="top-actions">
+        <div class="icon-btn" title="Labels" @click="$router.push({ name: 'labels' })">
+           <svg viewBox="0 0 24 24" width="24" height="24" stroke="#5f6368" stroke-width="2" fill="none"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path><line x1="7" y1="7" x2="7.01" y2="7"></line></svg>
+        </div>
         <div class="notification-badge">
           <div class="icon-btn">
              <svg viewBox="0 0 24 24" width="24" height="24" stroke="#5f6368" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
           </div>
         </div>
         <div class="icon-btn" title="View Options" @click="toggleViewMode">
+           <!-- View Mode Icon (Rectangle with line) -->
            <svg viewBox="0 0 24 24" width="24" height="24" stroke="#5f6368" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="9" y1="3" x2="9" y2="21"></line></svg>
         </div>
       </div>
@@ -94,11 +98,11 @@
           <svg viewBox="0 0 24 24" width="26" height="26" stroke="#5f6368" stroke-width="2" fill="none"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
        </div>
        <div class="nav-item">
-          <div class="plus-nav-btn">
+          <div class="plus-nav-btn" @click="showAddMenu = true">
              <svg viewBox="0 0 24 24" width="28" height="28" stroke="white" stroke-width="3" fill="none"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
           </div>
        </div>
-       <div class="nav-item">
+       <div class="nav-item" @click="$router.push({ name: 'labels' })">
            <svg viewBox="0 0 24 24" width="24" height="24" stroke="#5f6368" stroke-width="2" fill="none"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path><line x1="7" y1="7" x2="7.01" y2="7"></line></svg>
        </div>
        <div class="nav-item">
@@ -164,12 +168,93 @@
         </div>
     </Teleport>
 
+    <!-- Add Menu Sheet -->
+    <Teleport to="body">
+        <div v-if="showAddMenu" class="sheet-overlay" @click="showAddMenu = false">
+            <div 
+                class="sheet-content add-menu-sheet" 
+                @click.stop
+                @touchstart="handleAddMenuTouchStart"
+                @touchmove="handleAddMenuTouchMove"
+                @touchend="handleAddMenuTouchEnd"
+            >
+                <div class="drag-handle"></div>
+                
+                <h3 class="sheet-title" style="text-align: center; color: #7f8c8d; font-size: 1rem;">Add to pipeline Leads</h3>
+
+                <div class="menu-options">
+                    <!-- Option 1: Add Contact -->
+                    <div class="menu-option" @click="navigate('add-contact')">
+                        <div class="option-bar blue"></div>
+                        <div class="option-content">
+                            <div class="option-icon blue-text">
+                                <svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><line x1="20" y1="8" x2="20" y2="14"></line><line x1="23" y1="11" x2="17" y2="11"></line></svg>
+                            </div>
+                            <div class="option-text">
+                                <div class="option-title blue-text">Add Contact Lead</div>
+                                <div class="option-sub">Add a smart contact</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Option 1.5: Add Property -->
+                    <div class="menu-option" @click="navigate('add-property')">
+                        <div class="option-bar orange"></div>
+                        <div class="option-content">
+                            <div class="option-icon orange-text">
+                                <svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+                            </div>
+                            <div class="option-text">
+                                <div class="option-title orange-text">Add Property</div>
+                                <div class="option-sub">Add a new property</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Option 2: Add Task -->
+                    <div class="menu-option" @click="navigate('add-task')">
+                         <div class="option-bar green"></div>
+                         <div class="option-content">
+                            <div class="option-icon green-text">
+                                <svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                            </div>
+                            <div class="option-text">
+                                <div class="option-title green-text">Add task</div>
+                                <div class="option-sub">Plan your day</div>
+                            </div>
+                         </div>
+                    </div>
+
+                    <!-- Option 3: Add Quote -->
+                    <div class="menu-option" @click="navigate('add-quote')">
+                         <div class="option-bar purple"></div>
+                         <div class="option-content">
+                             <div class="option-icon purple-text">
+                                 <svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                                    <rect x="2" y="5" width="20" height="14" rx="2" />
+                                    <line x1="2" y1="10" x2="22" y2="10" />
+                                    <path d="M12 15h.01"/>
+                                 </svg>
+                             </div>
+                             <div class="option-text">
+                                <div class="option-title purple-text">Add Quote</div>
+                                <div class="option-sub">Create a quote</div>
+                             </div>
+                         </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </Teleport>
+
   </div>
 </template>
 
 <script setup>
 import { computed, onMounted, ref } from 'vue';
 import { useStore } from 'vuex';
+import { useRouter } from 'vue-router';
 import SidebarMenu from '../components/SidebarMenu.vue';
 import ActivityComponent from './ActivityView.vue';
 import ListComponent from '../components/ListComponent.vue';
@@ -182,6 +267,53 @@ const isCompactView = ref(false);
 const showSidebar = ref(false);
 const showSyncModal = ref(false);
 const showManageModal = ref(false);
+const showAddMenu = ref(false);
+
+const router = useRouter(); 
+
+const navigate = (action) => {
+    showAddMenu.value = false;
+    if (action === 'add-contact') {
+        router.push({ name: 'create-contact' });
+    } else if (action === 'add-property') {
+        router.push({ name: 'labels', query: { create: true } }); // Navigate to Properties List (formerly Labels) with create flag
+    } else if (action === 'add-task') {
+        console.log("Navigate to Add Task");
+        // router.push({ name: 'create-task' }); // Placeholder
+    } else if (action === 'add-quote') {
+        console.log("Navigate to Add Quote");
+        // router.push({ name: 'create-quote' }); // Placeholder
+    }
+};
+
+// Drag Down Logic for Add Menu Sheet
+const addMenuTouchStartY = ref(0);
+const addMenuTouchCurrentY = ref(0);
+
+const handleAddMenuTouchStart = (e) => {
+    addMenuTouchStartY.value = e.touches[0].clientY;
+};
+
+const handleAddMenuTouchMove = (e) => {
+    addMenuTouchCurrentY.value = e.touches[0].clientY;
+    const diff = addMenuTouchCurrentY.value - addMenuTouchStartY.value;
+    if (diff > 0) {
+        e.currentTarget.style.transform = `translateY(${diff}px)`;
+    }
+};
+
+const handleAddMenuTouchEnd = (e) => {
+    const endY = e.changedTouches[0].clientY;
+    const diff = endY - addMenuTouchStartY.value;
+    
+    if (diff > 100) { 
+        showAddMenu.value = false;
+    } 
+    
+    e.currentTarget.style.transform = '';
+    addMenuTouchStartY.value = 0;
+    addMenuTouchCurrentY.value = 0;
+};
 
 const toggleViewMode = () => {
     isCompactView.value = !isCompactView.value;
@@ -678,5 +810,67 @@ const handleTouchEnd = (e) => {
 @keyframes slideUp {
     from { transform: translateY(100%); }
     to { transform: translateY(0); }
+}
+/* Add Menu Styles */
+.menu-options {
+    padding: 10px 15px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.menu-option {
+    display: flex;
+    background: white;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+    cursor: pointer;
+    height: 70px;
+}
+
+.option-bar {
+    width: 6px;
+    height: 100%;
+}
+.option-bar.blue { background-color: #03A9F4; }
+.option-bar.green { background-color: #00bfa5; }
+.option-bar.purple { background-color: #9C27B0; }
+
+.option-content {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    padding: 0 15px;
+    gap: 15px;
+}
+
+.option-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.blue-text { color: #03A9F4; }
+.green-text { color: #00bfa5; }
+.purple-text { color: #9C27B0; }
+.orange-text { color: #FF9800; }
+.option-bar.orange { background-color: #FF9800; }
+
+.option-text {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.option-title {
+    font-size: 1rem;
+    font-weight: 500;
+    margin-bottom: 2px;
+    color: #333;
+}
+
+.option-sub {
+    font-size: 0.8rem;
+    color: #888;
 }
 </style>

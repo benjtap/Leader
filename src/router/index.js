@@ -40,6 +40,12 @@ const router = createRouter({
             meta: { requiresAuth: true }
         },
         {
+            path: '/create-contact',
+            name: 'create-contact',
+            component: () => import('../views/CreateContactView.vue'),
+            meta: { requiresAuth: true }
+        },
+        {
             path: '/quote-settings',
             name: 'quote-settings',
             component: () => import('../views/QuoteSettingsView.vue'),
@@ -86,6 +92,40 @@ const router = createRouter({
             meta: { requiresAuth: true }
         },
         {
+            path: '/labels', // Keep path for now or rename to /properties-list? Instructions say "replace labels view". 
+            // Let's keep /labels path to avoid breaking existing links unless requested, but point to new component.
+            // Or better, let's make it explicit.
+            name: 'labels', // Keep name 'labels' referenced in other places? 
+            // Instructions: "la vue label list sera remplace par property list"
+            component: () => import('../views/PropertiesListView.vue'), // Changed component
+            meta: { requiresAuth: true }
+        },
+        {
+            path: '/labels/:id',
+            name: 'label-filtered',
+            component: () => import('../views/LabelFilteredLeadsView.vue'),
+            meta: { requiresAuth: true }
+        },
+        {
+            path: '/properties',
+            name: 'properties',
+            component: () => import('../views/PropertiesView.vue'),
+            meta: { requiresAuth: true }
+        },
+        {
+            path: '/property/:propertyId',
+            name: 'property-details',
+            component: () => import('../views/PropertyDetailsView.vue'),
+            props: true,
+            meta: { requiresAuth: true }
+        },
+        {
+            path: '/contacts',
+            name: 'contacts',
+            component: () => import('../views/ContactsView.vue'),
+            meta: { requiresAuth: true }
+        },
+        {
             path: '/workspace-selection',
             name: 'workspace-selection',
             component: () => import('../views/WorkspaceSelectionView.vue'),
@@ -95,6 +135,12 @@ const router = createRouter({
             path: '/settings',
             name: 'settings',
             component: () => import('../views/SettingsView.vue'),
+            meta: { requiresAuth: true }
+        },
+        {
+            path: '/business-card',
+            name: 'business-card',
+            component: () => import('../views/BusinessCardView.vue'),
             meta: { requiresAuth: true }
         },
         {

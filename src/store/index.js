@@ -12,6 +12,8 @@ import leadsService from '../services/leadsService'
 import listsService from '../services/listsService'
 import workflowService from '../services/workflowService'
 import quotesService from '../services/quotesService'
+import propertiesService from '../services/propertiesService'
+import contactsService from '../services/contactsService'
 
 import { formatSmartDate } from '../utils/dateUtils'
 
@@ -29,11 +31,17 @@ const getDefaultState = () => ({
     shifts: [],
     activities: [],
     leads: [],
+    labels: [], // New state
     draftQuote: null,
     quotes: [], // Legacy compat
     meetings: [],
     closedDeals: [], // Legacy compat
+    closedDeals: [], // Legacy compat
     followUp: [], // Legacy compat
+
+    // New Entities
+    properties: [],
+    contacts: [],
     notRelevant: [], // Legacy compat
 
     // Dynamic Workflow
@@ -158,6 +166,15 @@ export default createStore({
 
         allWorkflowSteps: state => state.workflowSteps,
         tenantMembers: state => state.tenantMembers || [], // New Getter
+        tenantMembers: state => state.tenantMembers || [], // New Getter
+        allLabels: state => state.labels || [],
+        allProperties: state => state.properties || [],
+        allContacts: state => state.contacts || [],
+        getLabelsDict: state => {
+            const map = {};
+            if (state.labels) state.labels.forEach(l => map[l.id] = l);
+            return map;
+        },
 
         allQuotes: state => state.quotes, // Legacy
         allMeetings: state => state.meetings,
@@ -257,6 +274,13 @@ export default createStore({
         SET_SHIFTS(state, shifts) { state.shifts = shifts },
         SET_ACTIVITIES(state, activities) { state.activities = activities },
         SET_LEADS(state, leads) { state.leads = leads },
+        SET_LABELS(state, labels) { state.labels = labels },
+        ADD_LABEL(state, label) { state.labels.push(label); },
+        UPDATE_LABEL(state, label) {
+            const idx = state.labels.findIndex(l => l.id === label.id);
+            if (idx !== -1) state.labels.splice(idx, 1, label);
+        },
+        DELETE_LABEL(state, id) { state.labels = state.labels.filter(l => l.id !== id); },
         SET_QUOTES(state, data) { state.quotes = data },
         SET_MEETINGS(state, data) { state.meetings = data },
         SET_CLOSED_DEALS(state, data) { state.closedDeals = data },
@@ -271,8 +295,24 @@ export default createStore({
             if (type === 'quote' || type === 'quotes') state.quotes = items;
             if (type === 'followup') state.followUp = items;
             if (type === 'closeddeals') state.closedDeals = items;
+            if (type === 'closeddeals') state.closedDeals = items;
             if (type === 'notrelevant') state.notRelevant = items;
         },
+        SET_PROPERTIES(state, data) { state.properties = data; },
+        ADD_PROPERTY(state, item) { state.properties.push(item); },
+        UPDATE_PROPERTY(state, item) {
+            const idx = state.properties.findIndex(p => p.id === item.id);
+            if (idx !== -1) state.properties.splice(idx, 1, item);
+        },
+        DELETE_PROPERTY(state, id) { state.properties = state.properties.filter(p => p.id !== id); },
+
+        SET_CONTACTS(state, data) { state.contacts = data; },
+        ADD_CONTACT(state, item) { state.contacts.push(item); },
+        UPDATE_CONTACT(state, item) {
+            const idx = state.contacts.findIndex(c => c.id === item.id);
+            if (idx !== -1) state.contacts.splice(idx, 1, item);
+        },
+        DELETE_CONTACT(state, id) { state.contacts = state.contacts.filter(c => c.id !== id); },
         SET_DRAFT_QUOTE(state, quote) {
             state.draftQuote = quote;
         },
@@ -424,7 +464,11 @@ export default createStore({
             try {
                 await Promise.all([
                     dispatch('fetchActivities'),
-                    dispatch('fetchWorkflowAndLists')
+                    dispatch('fetchWorkflowAndLists'),
+                    dispatch('fetchWorkflowAndLists'),
+                    dispatch('fetchLabels'),
+                    dispatch('fetchProperties'),
+                    dispatch('fetchContacts')
                 ])
                 console.log('Initial data fetched successfully')
             } catch (error) {
@@ -534,6 +578,28 @@ export default createStore({
             }
         },
 
+        async moveItem({ dispatch }, { item, target, targetUserId }) {
+            try {
+                // Check if Property (has address and sellerPrice or listType matches property status)
+                const propertyStatuses = ['New', 'Visit', 'Offer', 'Signed', 'Sold'];
+                if (item.address && (item.sellerPrice || propertyStatuses.includes(item.listType) || propertyStatuses.includes(target))) {
+                    const updated = { ...item, status: target };
+                    await propertiesService.update(item.id, updated);
+                    dispatch('fetchProperties');
+                } else {
+                    // Lead Logic
+                    await leadsService.moveLead(item.id, target);
+                    if (targetUserId) {
+                        await leadsService.assignLead(item.id, targetUserId);
+                    }
+                    dispatch('fetchWorkflowAndLists');
+                }
+            } catch (e) {
+                console.error("Move item failed", e);
+                throw e;
+            }
+        },
+
         async createWorkflowStep({ dispatch }, name) {
             await workflowService.createStep(name);
             dispatch('fetchWorkflowAndLists');
@@ -559,6 +625,59 @@ export default createStore({
         async deleteWorkflowStepAndMove({ dispatch }, { id, targetType, targetUserId }) {
             await workflowService.deleteStepAndMove(id, targetType, targetUserId);
             dispatch('fetchWorkflowAndLists');
+        },
+
+        async fetchLabels({ commit }) {
+            try {
+                const res = await api.get('/labels');
+                if (res.data) {
+                    commit('SET_LABELS', res.data);
+                }
+            } catch (e) {
+                console.error('Fetch labels failed', e);
+            }
+        },
+
+        async createLabel({ commit, dispatch }, labelData) {
+            try {
+                const res = await api.post('/labels', labelData);
+                if (res.data) {
+                    commit('ADD_LABEL', res.data);
+                    dispatch('showToast', { message: 'Label created', type: 'success' });
+                    // Re-fetch to ensure sync with backend mostly for IDs or calculated fields
+                    dispatch('fetchLabels');
+                }
+            } catch (e) {
+                console.error('Create label failed', e);
+                dispatch('showToast', { message: 'Failed to create label', type: 'error' });
+                throw e;
+            }
+        },
+
+        async updateLabel({ commit, dispatch }, labelData) {
+            try {
+                const res = await api.put(`/labels/${labelData.id}`, labelData);
+                if (res.data) {
+                    commit('UPDATE_LABEL', res.data);
+                    dispatch('showToast', { message: 'Label updated', type: 'success' });
+                }
+            } catch (e) {
+                console.error('Update label failed', e);
+                dispatch('showToast', { message: 'Failed to update label', type: 'error' });
+                throw e;
+            }
+        },
+
+        async deleteLabel({ commit, dispatch }, labelId) {
+            try {
+                await api.delete(`/labels/${labelId}`);
+                commit('DELETE_LABEL', labelId);
+                dispatch('showToast', { message: 'Label deleted', type: 'success' });
+            } catch (e) {
+                console.error('Delete label failed', e);
+                dispatch('showToast', { message: 'Failed to delete label', type: 'error' });
+                throw e;
+            }
         },
 
         async fetchQuotes({ commit }, leadId) {
@@ -733,8 +852,71 @@ export default createStore({
                         commit('SET_GENERAL_SETTINGS_BULK', res.data.generalSettings)
                     }
                 }
-            } catch (e) { console.error(e) }
+            } catch (e) {
+                console.error('Fetch settings failed', e)
+            }
         },
+
+        async fetchProperties({ commit }) {
+            try {
+                const res = await propertiesService.getAll();
+                if (res.data) commit('SET_PROPERTIES', res.data);
+            } catch (e) { console.error('Fetch properties failed', e); }
+        },
+        async createProperty({ commit, dispatch }, data) {
+            try {
+                const res = await propertiesService.create(data);
+                if (res.data) {
+                    commit('ADD_PROPERTY', res.data);
+                    return res.data;
+                }
+            } catch (e) { console.error('Create property failed', e); throw e; }
+        },
+        async updateProperty({ commit }, { id, data }) {
+            try {
+                const res = await propertiesService.update(id, data);
+                // reload all to be safe or update local
+                // For now, assuming data returns or we use local
+                // We should probably just refresh
+                dispatch('fetchProperties');
+            } catch (e) { console.error('Update property failed', e); throw e; }
+        },
+        async deleteProperty({ commit }, id) {
+            try {
+                await propertiesService.delete(id);
+                commit('DELETE_PROPERTY', id);
+            } catch (e) { console.error('Delete property failed', e); throw e; }
+        },
+
+        async fetchContacts({ commit }) {
+            try {
+                const res = await contactsService.getAll();
+                if (res.data) commit('SET_CONTACTS', res.data);
+            } catch (e) { console.error('Fetch contacts failed', e); }
+        },
+        async createContact({ commit }, data) {
+            try {
+                const res = await contactsService.create(data);
+                if (res.data) {
+                    commit('ADD_CONTACT', res.data);
+                    return res.data;
+                }
+            } catch (e) { console.error('Create contact failed', e); throw e; }
+        },
+        async updateContact({ commit, dispatch }, { id, data }) {
+            try {
+                await contactsService.update(id, data);
+                dispatch('fetchContacts');
+            } catch (e) { console.error('Update contact failed', e); throw e; }
+        },
+        async deleteContact({ commit }, id) {
+            try {
+                await contactsService.delete(id);
+                commit('DELETE_CONTACT', id);
+            } catch (e) { console.error('Delete contact failed', e); throw e; }
+        },
+
+
         async saveAllSettings({ state }) {
             const settings = {
                 salaryStartDay: state.settings.salaryStartDay,
@@ -794,6 +976,61 @@ export default createStore({
             commit('SET_TAX_SETTING', payload)
             dispatch('saveAllSettings')
         },
+        async fetchLabels({ commit }) {
+            try {
+                const res = await api.get('/labels');
+                if (res.data) commit('SET_LABELS', res.data);
+            } catch (e) { console.error("Error fetching labels", e); }
+        },
+        async createLabel({ commit }, label) {
+            try {
+                const res = await api.post('/labels', label);
+                if (res.data) {
+                    commit('ADD_LABEL', res.data);
+                    return res.data;
+                }
+            } catch (e) {
+                console.error("Error creating label", e);
+                throw e;
+            }
+        },
+        async updateLabel({ commit }, label) {
+            try {
+                const res = await api.put(`/labels/${label.id}`, label);
+                if (res.data) commit('UPDATE_LABEL', res.data);
+            } catch (e) {
+                console.error("Error updating label", e);
+                throw e;
+            }
+        },
+        async deleteLabel({ commit }, id) {
+            try {
+                await api.delete(`/labels/${id}`);
+                commit('DELETE_LABEL', id);
+            } catch (e) {
+                console.error("Error deleting label", e);
+                throw e;
+            }
+        },
+        async addLabelToLead({ commit }, { leadId, labelId }) {
+            try {
+                const res = await api.post('/leads/add-label', { leadId, labelId });
+                if (res.data) commit('UPDATE_LEAD', res.data);
+            } catch (e) {
+                console.error("Error adding label to lead", e);
+                throw e;
+            }
+        },
+        async removeLabelFromLead({ commit }, { leadId, labelId }) {
+            try {
+                const res = await api.post('/leads/remove-label', { leadId, labelId });
+                if (res.data) commit('UPDATE_LEAD', res.data);
+            } catch (e) {
+                console.error("Error removing label from lead", e);
+                throw e;
+            }
+        },
+
         updateTaxCreditPoints({ commit, dispatch }, points) {
             commit('SET_TAX_CREDIT_POINTS', points)
             dispatch('saveAllSettings')

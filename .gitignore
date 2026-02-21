@@ -89,3 +89,6 @@ Desktop.ini
 
 # Submodules (if you want to ignore them, uncomment)
 # LeaderAPI/
+
+# Security - Google Services
+android/app/google-services.json

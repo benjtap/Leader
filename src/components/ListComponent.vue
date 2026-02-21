@@ -31,8 +31,9 @@
           <!-- Main Row Content -->
           <div class="item-row">
             <div class="avatar" :style="{ backgroundColor: item.color || '#e0e0e0', color: item.textColor || '#fff' }">
-              <span v-if="!item.isIcon">{{ item.initial }}</span>
-              <span v-else>👤</span>
+              <span v-if="item.icon" v-html="item.icon" class="custom-icon"></span>
+              <span v-else-if="item.isIcon">👤</span>
+              <span v-else>{{ item.initial }}</span>
             </div>
             
             <div class="info">
@@ -94,6 +95,7 @@
       <MoveToSheet 
         v-if="showMoveToSheet" 
         :item="selectedItemForAction" 
+        :statusOptions="statusOptions"
         @close="showMoveToSheet = false" 
         @move="onMoveItem" 
       />
@@ -114,7 +116,8 @@ defineProps({
     type: Array,
     default: () => []
   },
-  createLabel: String
+  createLabel: String,
+  statusOptions: Array
 })
 
 defineEmits(['create']);
@@ -188,10 +191,25 @@ const handleAction = (type, item) => {
 };
 
 const onActionSelect = (action) => {
-    console.log("Selected action:", action, "for item:", selectedItemForAction.value);
-    
-    if (action === 'add_quote') {
-        const item = selectedItemForAction.value;
+    // console.log("Selected action:", action, "for item:", selectedItemForAction.value);
+    const item = selectedItemForAction.value;
+    const phone = item.phone || item.number || item.name; // Fallback attempts
+
+    if (action === 'call') {
+        window.location.href = `tel:${phone}`;
+    } else if (action === 'sms') {
+        window.location.href = `sms:${phone}`;
+    } else if (action === 'whatsapp') {
+        // Remove non-digit chars for WhatsApp link
+        const cleanPhone = String(phone).replace(/\D/g, ''); 
+        window.open(`https://wa.me/${cleanPhone}`, '_system');
+    } else if (action === 'hide') {
+        // "Don't show in LEADer"
+        console.log('Hide item:', item);
+        // Dispatch store action if exists, or show toast
+        store.dispatch('showToast', { message: 'Item hidden from LEADer', type: 'info' });
+        // Optionally remove from local list via store mutation if needed
+    } else if (action === 'add_quote') {
         const leadId = item.id || item.phone;
         router.push({ name: 'create-quote', params: { leadId: leadId } });
     }
@@ -210,12 +228,26 @@ const getAssignedTo = (item) => {
 
 const onMoveItem = async (targetListId, item, targetUserId) => {
     // Intercept "Move to Quote" -> Open Create Quote Page
+    // Intercept "Move to Quote" -> Open Create Quote Page
     const normalizedTarget = String(targetListId).toLowerCase();
-    if (normalizedTarget.includes('quote') || normalizedTarget.includes('הצעת מחיר')) {
-        const leadId = item.id || item.phone;
-        router.push({ name: 'create-quote', params: { leadId: leadId } });
-        showMoveToSheet.value = false;
-        return;
+    const currentStatus = String(item.listType || '').toLowerCase();
+    
+    // Check if target is quote AND we are already in a quote status
+    const isTargetQuote = normalizedTarget.includes('quote') || normalizedTarget.includes('הצעת מחיר');
+    const isCurrentQuote = currentStatus.includes('quote') || currentStatus.includes('הצעת מחיר');
+
+    if (isTargetQuote) {
+        if (isCurrentQuote) {
+            // Already in quote status - just move (which does nothing/updates status) but don't redirect
+            // Actually, we should probably just return or let the standard move happen without redirect
+             console.log(`Item ${item.name} is already in quote status. Skipping creation page.`);
+             // proceed to standard move (which updates status/assigned)
+        } else {
+             const leadId = item.id || item.phone;
+             router.push({ name: 'create-quote', params: { leadId: leadId } });
+             showMoveToSheet.value = false;
+             return;
+        }
     }
 
     console.log(`Moving item ${item.name} to ${targetListId} (assigned to: ${targetUserId})`);
@@ -311,6 +343,19 @@ const onMoveItem = async (targetListId, item, targetUserId) => {
   font-weight: bold;
   font-size: 1rem; /* Reduced from 1.1rem */
   flex-shrink: 0;
+}
+
+.custom-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+}
+.custom-icon svg {
+    width: 100%;
+    height: 100%;
+    fill: currentColor;
 }
 
 .info {

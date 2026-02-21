@@ -83,7 +83,8 @@ import { ref, computed } from 'vue';
 import { useStore } from 'vuex';
 
 const props = defineProps({
-  item: Object
+  item: Object,
+  statusOptions: Array
 });
 
 const emit = defineEmits(['close', 'move']);
@@ -152,16 +153,15 @@ const moveOptions = computed(() => {
         { id: 'last_activity', label: 'Last Activity' }
     ];
 
-    if (workflowSteps.value && workflowSteps.value.length > 0) {
-        workflowSteps.value.forEach(step => {
+    const steps = props.statusOptions || workflowSteps.value;
+
+    if (steps && steps.length > 0) {
+        steps.forEach(step => {
             let label = step.name;
-            const normalized = String(step.type).toLowerCase();
-            if (normalized.includes('quote') || normalized.includes('הצעת מחיר')) {
-                label = 'Create Price Quote'; // English label as requested, or keep Hebrew if preferred "צור הצעת מחיר"
-            }
+            // let label = step.name; // Keep original name
             
             options.push({
-               id: step.type,
+               id: step.id || step.type, // Handle both id (property cols) and type (workflow steps)
                label: label
             });
         });
